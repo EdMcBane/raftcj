@@ -79,12 +79,12 @@
 
   (defn append-log [state prev-log-index entries leader-commit] 
     (let [
-      state (update-in state [:log] #(concat (subvec % 0 (inc prev-log-index)) entries))
+      state (update-in state [:log] #(vec (concat (subvec % 0 (inc prev-log-index)) entries)))
       commit-index (:commit-index state)
       [_, last-log-index] (last-log state)]
       (assoc state :commit-index (max 
-        (commit-index 
-        (min leader-commit last-log-index))))))
+        commit-index 
+        (min leader-commit last-log-index)))))
 
   (defmulti appended state-of)
   (defmethod appended :default [state term appender success]
@@ -92,15 +92,22 @@
       [(become-follower state term) []]))
 
   (defmulti append-entries state-of)
-  (defmethod append-entries :default [state term leader-id prev-log-index prev-log-term entries leader-commit]
+  (defmethod append-entries :follower [state term leader-id prev-log-index prev-log-term entries leader-commit]
     (if (> term (:current-term state))
       (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit)
       (if (< term (:current-term state))
         [state [(msg leader-id appended (:current-term state) (:id state) false)]]
         (let [
           local-prev-log (get (:log state) prev-log-index)]
-          (if (or (nil? local-prev-log) (not (= :prev-log-term (:term local-prev-log))))
+          (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log))))
             [state [(msg leader-id appended (:current-term state) (:id state) false)]]
-            [(append-log state entries) [(msg leader-id appended (:current-term state) (:id state) true)]])))))
+            [(append-log state prev-log-index entries leader-commit) [(msg leader-id appended (:current-term state) (:id state) true)]])))))
+
+  (defmethod append-entries :candidate [state term leader-id prev-log-index prev-log-term entries leader-commit]
+    (if (> term (:current-term state))
+      (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit)
+      (if (< term (:current-term state))
+        [state [(msg leader-id appended (:current-term state) (:id state) false)]]
+        (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit))))
 
 )

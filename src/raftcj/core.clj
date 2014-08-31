@@ -17,7 +17,7 @@
 (defn last-log [state]
   (assert (> (count (:log state)) 0))
   (let [index (dec (count (:log state)))
-        entry ((:log state) index)]
+        entry (get (:log state) index)]
     [entry, index]))
 
 (defn up-to-date [state last-log-term last-log-index]

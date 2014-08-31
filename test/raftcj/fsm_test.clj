@@ -165,5 +165,88 @@
             (is (= :leader (:statename state))))
         ))
 
-(deftest append-entries-test 
-    (testing "append-log-and-commit-index-update"))
+(deftest append-log-test 
+    (testing "appends to the end if non-overlapping"
+        (let [
+            before (initial-state 0)
+            entries [{:term 1} {:term 2}]
+            after (append-log before 0 entries 0)]
+            (is (= 
+                [{:term 0} {:term 1} {:term 2}] 
+                (:log after)))))
+    (testing "overwrites if overlapping"
+        (let [
+            before (initial-state 0)
+            entries [{:term 1} {:term 2}]
+            during (append-log before 0 entries 0)
+            after (append-log during 1 [{:term 3}] 0)]
+            (is (= 
+                [{:term 0} {:term 1} {:term 3}] 
+                (:log after)))))
+    (testing "updates commit-index to leader-commit < last-entry-index"
+        (let [
+            before (initial-state 0)
+            entries [{:term 1} {:term 2}]
+            after (append-log before 0 entries 1)]
+            (is (= 1 (:commit-index after)))))
+    (testing "updates commit-index to leader-commit == last-entry-index"
+        (let [
+            before (initial-state 0)
+            entries [{:term 1} {:term 2}]
+            after (append-log before 0 entries 2)]
+            (is (= 2 (:commit-index after)))))
+    (testing "does not update commit-index to leader-commit < commit-index"
+        (let [
+            before (assoc (initial-state 0) :commit-index 3)
+            entries [{:term 1} {:term 2}]
+            after (append-log before 0 entries 2)]
+            (is (= 3 (:commit-index after))))))
+
+(deftest appended-test
+    (testing "leader becomes follower if higher term"
+        (let [
+            before (become-leader (initial-state 0))
+            [after, msgs] (appended before 43 a-candidate-id false)]
+            (is (= :follower (:statename after))))))
+
+(deftest append-entries-test
+    (testing "candidate becomes follower if higher term"
+        (let [
+            [before msgs] (timeout (initial-state 0))
+            [after, msgs] (append-entries before 43 a-candidate-id 0 0 [] 0)]
+            (is (= :follower (:statename after)))))
+    (testing "replies with failure if lower term"
+        (let [
+            [before msgs] (timeout (initial-state 0))
+            [after, [msg]] (append-entries before 0 a-candidate-id 0 0 [] 0)]
+            (is (= false (last msg)))))
+    (testing "replies with failure if referencing non-existent prev-log-entry"
+        (let [
+            [before msgs] (timeout (initial-state 0))
+            [after, [msg]] (append-entries before 1 a-candidate-id 1 1 [] 0)]
+            (is (= false (last msg)))))
+     (testing "replies with success if referencing existing prev-log-entry"
+        (let [
+            [before msgs] (timeout (initial-state 0))
+            [after, [msg]] (append-entries before 1 a-candidate-id 0 0 [] 0)]
+            (is (= true (last msg))))))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
