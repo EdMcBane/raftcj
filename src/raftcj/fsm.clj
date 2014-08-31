@@ -5,10 +5,10 @@
 
   (defmulti become-follower state-of)
   (defmethod become-follower :default [state term]
-    (assoc (assoc (assoc state :current-term term) :votedFor nil) :statename :follower))
+    (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower))
 
-  (defn msg [target msg & args] 
-    (concat [target msg] args))
+  (defn msg [target type & args] 
+    (concat [target type] args))
 
   (defn vote [state candidate]
     (do 
@@ -18,7 +18,13 @@
           (= candidate vote))))
       (assoc state :voted-for candidate)))
 
-  (defn voted [] :todo)
+  (defmulti voted state-of)
+  (defmethod voted :default [state term voter granted] 
+    (if (> term (:current-term state))
+      [(become-follower state term) []]
+      (if granted
+        [(update-in state [:votes] #(conj % voter)) []]
+        [state []])))
 
   (defmulti request-vote state-of)
   (defmethod request-vote :default [state term candidate-id last-log-index last-log-term]
@@ -32,28 +38,27 @@
         [(vote state candidate-id) [(msg candidate-id voted (:current-term state) true)]]
         [state [(msg candidate-id voted (:current-term state) false)]]))))
 
+
+  (defn become-candidate [state]
+    (assoc (assoc state :statename :candidate) :votes #{}))
+
+  (defmulti timeout state-of)
+  (defmethod timeout :follower [state]
+    (timeout (become-candidate state)))
+
+  (defmethod timeout :candidate [state]
+    (let [
+      state (update-in state [:current-term] inc)
+      state (vote state (:id state))]
+      [state, (concat
+        [(msg timer reset)]
+        (map
+         #(apply msg (concat [% request-vote] (map state [:current-term :id :last-log-index :last-log-term])))
+         (filter #(not (= % (:id state))) config))
+        )]
+      ))
+
   )
-
-  ; (defn become-candidate [state]
-  ;   (assoc state :statename :candidate))
-
-  ; (defmulti timeout state-of)
-  ; (defmethod timeout :follower [state]
-  ;   (timeout (become-candidate state)))
-
-
-  ; (defmethod timeout :candidate [state]
-  ;   (let [state (assoc (update-in state [:currentTerm] inc) :votedFor nil)]
-  ;     (let
-  ;       [state (vote state (:id state))]
-  ;       [state,
-  ;       (concat
-  ;         (send timer reset)
-  ;         (map
-  ;          #(apply send (concat [% request-vote] (map state [:currentTerm :id :last-log-index :last-log-term])))
-  ;          (filter #(not (= % (:id state))) config))
-  ;         )]
-  ;       )))
 
   ; (defmulti append-entries state-of)
 

@@ -6,6 +6,7 @@
                         :id id
                         :current-term 0 :voted-for nil :log [{:term 0}]
                         :commit-index 0 :last-applied 0
+                        :votes #{}
                         })
 
 (defn has-vote [state candidate-id]
