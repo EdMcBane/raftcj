@@ -5,7 +5,9 @@
 
 (def config {0 "127.0.0.1"
              12 "127.0.0.2"
-             23 "127.0.0.3"})
+             23 "127.0.0.3"
+             34 "127.0.0.4"
+             45 "127.0.0.5"})
 
 (fsm config)
 
@@ -114,6 +116,14 @@
             (is (false? (last msg)))))
      )
 
+(deftest become-leader-test
+    (testing "sets statename to :leader"
+        (is (= :leader (:statename (become-leader (initial-state 0))))))
+    (testing "sets next-match to zero for cluster members"
+        (is (= 0 (get (:next-match (become-leader (initial-state 0))) 12))))
+    (testing "sets next-index to last-log-index+1 for cluster members"
+        (is (= 1 (get (:next-index (become-leader (initial-state 0))) 12)))))
+
 (deftest voted-test
     (testing "updates current-term on higher term"
         (let [
@@ -140,6 +150,19 @@
             [before, msgs] (timeout (initial-state 0))
             [after, [msg]] (voted before 1 :nonmember true)]
             (is (not (contains? (:votes after) :nonmember))))
+        )
+    (testing "candidate ignores votes from older terms"
+        (let [
+            [before, msgs] (timeout (initial-state 0))
+            [after, [msg]] (voted before 0 a-candidate-id true)]
+            (is (not (contains? (:votes after) :nonmember))))
+        )
+    (testing "candidate becomes leader on majority"
+        (let [
+            [state, msgs] (timeout (initial-state 0))
+            [state, [msg]] (voted state 0 12 true)
+            [state, [msg]] (voted state 0 23 true)]
+            (is (= :leader (:statename state))))
         ))
 
 ; (let [
