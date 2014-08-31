@@ -3,10 +3,9 @@
             [raftcj.core :refer :all]
             [raftcj.fsm :refer :all]))
 
-(def config [
-             {:id 1 :addr "127.0.0.1"}
-             {:id 2 :addr "127.0.0.2"}
-             {:id 3 :addr "127.0.0.3"}])
+(def config {0 "127.0.0.1"
+             12 "127.0.0.2"
+             23 "127.0.0.3"})
 
 (fsm config)
 
@@ -135,7 +134,13 @@
         (let [
             [before, msgs] (timeout (initial-state 0))
             [after, [msg]] (voted before 1 a-candidate-id false)]
-            (is (not (contains? (:votes after) a-candidate-id))))))
+            (is (not (contains? (:votes after) a-candidate-id)))))
+    (testing "candidate ignores votes from servers not part of cluster"
+        (let [
+            [before, msgs] (timeout (initial-state 0))
+            [after, [msg]] (voted before 1 :nonmember true)]
+            (is (not (contains? (:votes after) :nonmember))))
+        ))
 
 ; (let [
 ;       [state1 & msgs] (timeout (initial-state 1))

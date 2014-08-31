@@ -22,7 +22,7 @@
   (defmethod voted :default [state term voter granted] 
     (if (> term (:current-term state))
       [(become-follower state term) []]
-      (if granted
+      (if (and granted (contains? config voter))
         [(update-in state [:votes] #(conj % voter)) []]
         [state []])))
 
@@ -54,7 +54,7 @@
         [(msg timer reset)]
         (map
          #(apply msg (concat [% request-vote] (map state [:current-term :id :last-log-index :last-log-term])))
-         (filter #(not (= % (:id state))) config))
+         (filter #(not (= (:id state) %)) (keys config)))
         )]
       ))
 
