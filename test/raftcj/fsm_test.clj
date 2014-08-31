@@ -165,8 +165,5 @@
             (is (= :leader (:statename state))))
         ))
 
-; (let [
-;       [state1 & msgs] (timeout (initial-state 1))
-;       [state2 & msgs] (append-entries state1 2)]
-;   [state1 state2]
-;   )
+(deftest append-entries-test 
+    (testing "append-log-and-commit-index-update"))
