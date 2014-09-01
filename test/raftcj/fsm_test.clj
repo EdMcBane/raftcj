@@ -231,11 +231,23 @@
             [before msgs] (timeout (initial-state 0))
             [after, [msg]] (append-entries before 1 a-candidate-id 1 1 [] 0)]
             (is (= false (last msg)))))
+    (testing "resets timer if referencing non-existent prev-log-entry"
+        (let [
+            [before msgs] (timeout (initial-state 0))
+            [after, msgs] (append-entries before 1 a-candidate-id 1 1 [] 0)
+            [reply [target type args]] msgs]
+                (is (= reset type))))
      (testing "replies with success if referencing existing prev-log-entry"
         (let [
             [before msgs] (timeout (initial-state 0))
             [after, [msg]] (append-entries before 1 a-candidate-id 0 0 [] 0)]
-            (is (= true (last msg))))))
+            (is (= true (last msg)))))
+     (testing "resets timer on successful append-entries"
+        (let [
+            [before msgs] (timeout (initial-state 0))
+            [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)
+            [reply [target type args]] msgs]
+                (is (= reset type)))))
 
 
 

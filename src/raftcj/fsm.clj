@@ -104,8 +104,12 @@
         (let [
           local-prev-log (get (:log state) prev-log-index)]
           (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log))))
-            [state [(msg leader-id appended (:current-term state) (:id state) false)]]
-            [(append-log state prev-log-index entries leader-commit) [(msg leader-id appended (:current-term state) (:id state) true)]])))))
+            [state [
+              (msg leader-id appended (:current-term state) (:id state) false)
+              (msg timer reset (:id state))]]
+            [(append-log state prev-log-index entries leader-commit) [
+              (msg leader-id appended (:current-term state) (:id state) true)
+              (msg timer reset (:id state))]])))))
 
   (defmethod append-entries :candidate [state term leader-id prev-log-index prev-log-term entries leader-commit]
     (if (> term (:current-term state))
