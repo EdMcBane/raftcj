@@ -86,6 +86,12 @@
             before (assoc (initial-state 0) :current-term 42)
             [after, [msg]] (request-vote before 42 a-candidate-id 0 0)]
             (is (true? (last msg)))))
+    (testing "resets timer when granting vote"
+        (let [
+            before (assoc (initial-state 0) :current-term 42)
+            [after msgs] (request-vote before 42 a-candidate-id 0 0)
+            [reply [target type args]] msgs]
+                (is (= reset type))))
     (testing "denies vote if already voted"
         (let [
             before (assoc (initial-state 0) :current-term 42)

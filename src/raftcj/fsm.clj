@@ -52,7 +52,9 @@
         (if (and
          (has-vote state candidate-id)
          (up-to-date state last-log-term last-log-index))
-        [(vote state candidate-id) [(msg candidate-id voted (:current-term state) (:id state) true)]]
+        [(vote state candidate-id) [
+          (msg candidate-id voted (:current-term state) (:id state) true)
+          (msg timer reset (:id state))]]
         [state [(msg candidate-id voted (:current-term state) (:id state) false)]]))))
 
 
@@ -94,7 +96,9 @@
   (defmulti append-entries state-of)
   (defmethod append-entries :follower [state term leader-id prev-log-index prev-log-term entries leader-commit]
     (if (> term (:current-term state))
-      (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit)
+      (append-entries 
+        (become-follower state term) 
+        term leader-id prev-log-index prev-log-term entries leader-commit)
       (if (< term (:current-term state))
         [state [(msg leader-id appended (:current-term state) (:id state) false)]]
         (let [
