@@ -27,8 +27,9 @@
     (let [
     [_ last-log-index] (last-log state)
     to-entry #(vector % (inc last-log-index))
-    next-index (into {} (map to-entry (keys config)))
-    next-match (into {} (map #(vector % 0) (keys config)))]
+    others (filter #(not (= (:id state) %)) (keys config))
+    next-index (into {} (map to-entry others))
+    next-match (into {} (map #(vector % 0) others))]
     (assoc (assoc (assoc state :next-index next-index) :next-match next-match) :statename :leader)))
 
   (declare elected)
@@ -80,7 +81,6 @@
         msgs)]
       ))
 
-
   (defn update-or-append ([[x & xs :as orig][y & ys] acc]
     (if (nil? y)
       (concat acc orig)
@@ -88,7 +88,6 @@
         (recur xs ys (conj acc x))
         (recur nil ys (conj acc y)))))
     ([orig newer] (update-or-append orig newer [])))
-
 
   (defn update-log [log prev-log-index entries] 
     (let [
@@ -102,15 +101,42 @@
     (let [
       state (update-in state [:log]  #(update-log % prev-log-index entries))
       commit-index (:commit-index state)
-      [_, last-log-index] (last-log state)]
-      (assoc state :commit-index (max 
-        commit-index 
-        (min leader-commit last-log-index)))))
+      [_, last-log-index] (last-log state)
+      new-commit-index (max commit-index (min leader-commit last-log-index))
+      state (assoc state :commit-index new-commit-index)
+      apply-to-fsm (fn [state, cmd] (update-in state [:fsm] #(conj % cmd)))]
+      (reduce 
+        apply-to-fsm state 
+        (map :cmd (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index))))))
 
+  (defn highest-majority [match-indexes]
+    (let [
+      indexes (vals match-indexes)
+      count-ge #(count (filter (partial (>= %) indexes)))
+      is-majority (partial > (/ (count config) 2))
+      ]
+    (max (filter is-majority (map count-ge indexes)))))
+
+  (defn new-commit-index [current-term log commit-index]
+    (let [
+      uncommitted-replicated-indexes (range highest-majority (dec commit-index) -1)
+      is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
+      (first (filter is-from-current-term uncommitted-replicated-indexes))))
+
+  (declare update-msg)
   (defmulti appended state-of)
-  (defmethod appended :default [state term appender success]
+  (defmethod appended :default [state term appender next-index success]
     (if (> term (:current-term state))
-      [(become-follower state term) []]))
+      [(become-follower state term) []]
+      (if success
+        (let [
+          state (assoc-in (assoc-in state [:next-index appender] next-index) [:match-index appender] next-index)
+          commit-index (new-commit-index (:term state) (:log state) (:commit-index state))
+          state (assoc state :commit-index commit-index)]
+          [state []]
+        [(assoc-in state [:next-index appender] (dec next-index))
+          (update-msg state appender (dec next-index))]
+      ))))
 
   (defmulti append-entries state-of)
   (defmethod append-entries :follower [state term leader-id prev-log-index prev-log-term entries leader-commit]
@@ -140,11 +166,30 @@
   (defn elected [state]
     (let [
     [prev-log-entry prev-log-index] (last-log state)
-    appends (vec (map 
-      (fn [[k v]] (msg k append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) [] (:commit-index state)))
-      config))
+    heartbeats (vec (map 
+      (fn [[peer _]] (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) [] (:commit-index state)))
+      (:next-index state)))
     reset (msg beat reset)]
-    [state (concat appends reset)]))
+    [state (concat heartbeats reset)]))
+
+  (defn update-msg [[state peer idx]]
+    (let [
+      prev-log-index (dec idx)
+      prev-log-entry (get (:log state) prev-log-index)
+      entries (subvec (:log state) idx)]
+    (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) entries (:commit-index state))))
+
+  (defn executed [client cmd] :todo)
+
+  (defmulti execute state-of)
+  (defmethod execute :leader [state client cmd]
+    (let [
+      state (update-in state [:log] #(conj % {:term (:current-term state) :cmd cmd}))
+      [_ last-log-index] (last-log state)
+      needing-update (filter (fn [peer idx] (>= last-log-index idx)) (:next-index state))
+      updates (vec (map (partial update-msg state) needing-update))]
+      [state updates]))
+
 
 
 ; TODO: RPC, not messages

@@ -229,8 +229,8 @@
             (is (= 2 (:commit-index after)))))
     (testing "does not update commit-index to leader-commit < commit-index"
         (let [
-            before (assoc (initial-state 0) :commit-index 3)
-            entries [{:term 1} {:term 2}]
+            before (assoc (assoc (initial-state 0) :commit-index 3) :log [{:term 0} {:term 0} {:term 0} {:term 0}])
+            entries []
             after (append-log before 0 entries 2)]
             (is (= 3 (:commit-index after))))))
 
@@ -238,7 +238,7 @@
     (testing "leader becomes follower if higher term"
         (let [
             before (become-leader (initial-state 0))
-            [after, msgs] (appended before 43 a-candidate-id false)]
+            [after, msgs] (appended before 43 a-candidate-id 1 false)]
             (is (= :follower (:statename after))))))
 
 (deftest append-entries-test
