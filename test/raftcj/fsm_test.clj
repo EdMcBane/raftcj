@@ -171,6 +171,14 @@
             (is (= :leader (:statename state))))
         ))
 
+(deftest update-or-append-test
+    (testing "appends missing entries"
+        (is (= [1 2 3 4 5] (update-or-append [1 2 3] [1 2 3 4 5] []))))
+    (testing "does not truncate on missing entries"
+        (is (= [1 2 3] (update-or-append [1 2 3] [] []))))
+    (testing "truncates on mismatch"
+        (is (= [1 4] (update-or-append [1 2 3] [1 4] [])))))
+
 (deftest append-log-test 
     (testing "appends to the end if non-overlapping"
         (let [
@@ -180,7 +188,7 @@
             (is (= 
                 [{:term 0} {:term 1} {:term 2}] 
                 (:log after)))))
-    (testing "overwrites if overlapping"
+    (testing "overwrites if mismatched"
         (let [
             before (initial-state 0)
             entries [{:term 1} {:term 2}]
@@ -188,6 +196,24 @@
             after (append-log during 1 [{:term 3}] 0)]
             (is (= 
                 [{:term 0} {:term 1} {:term 3}] 
+                (:log after)))))
+    (testing "overwrites and truncates if mismatched"
+        (let [
+            before (initial-state 0)
+            entries [{:term 1} {:term 2} {:term 3}]
+            during (append-log before 0 entries 0)
+            after (append-log during 0 [{:term 4}] 0)]
+            (is (= 
+                [{:term 0} {:term 4}] 
+                (:log after)))))
+    (testing "does not overwrite with empty entries"
+        (let [
+            before (initial-state 0)
+            entries [{:term 1} {:term 2}]
+            during (append-log before 0 entries 0)
+            after (append-log during 0 [] 0)]
+            (is (= 
+                [{:term 0} {:term 1} {:term 2}] 
                 (:log after)))))
     (testing "updates commit-index to leader-commit < last-entry-index"
         (let [

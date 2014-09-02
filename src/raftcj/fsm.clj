@@ -31,6 +31,8 @@
     next-match (into {} (map #(vector % 0) (keys config)))]
     (assoc (assoc (assoc state :next-index next-index) :next-match next-match) :statename :leader)))
 
+  (declare elected)
+
   (defmulti voted state-of)
   (defmethod voted :default [state term voter granted]
     (if (> term (:current-term state))
@@ -39,7 +41,7 @@
         (let
           [state (update-in state [:votes] #(conj % voter))]
           (if (majority config (:votes state))
-            [(become-leader state), []]
+            (elected (become-leader state))
             [state []]))
         [state []])))
 
@@ -79,9 +81,26 @@
       ))
 
 
+  (defn update-or-append ([[x & xs :as orig][y & ys] acc]
+    (if (nil? y)
+      (concat acc orig)
+      (if (= x y)
+        (recur xs ys (conj acc x))
+        (recur nil ys (conj acc y)))))
+    ([orig newer] (update-or-append orig newer [])))
+
+
+  (defn update-log [log prev-log-index entries] 
+    (let [
+      prefix (subvec log 0 (inc prev-log-index))
+      updating (subvec log (inc prev-log-index))
+      suffix (update-or-append updating entries)
+      ]
+      (vec (concat prefix suffix))))
+
   (defn append-log [state prev-log-index entries leader-commit] 
     (let [
-      state (update-in state [:log] #(vec (concat (subvec % 0 (inc prev-log-index)) entries)))
+      state (update-in state [:log]  #(update-log % prev-log-index entries))
       commit-index (:commit-index state)
       [_, last-log-index] (last-log state)]
       (assoc state :commit-index (max 
@@ -118,4 +137,15 @@
         [state [(msg leader-id appended (:current-term state) (:id state) false)]]
         (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit))))
 
+  (defn elected [state]
+    (let [
+    [prev-log-entry prev-log-index] (last-log state)
+    appends (vec (map 
+      (fn [[k v]] (msg k append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) [] (:commit-index state)))
+      config))
+    reset (msg beat reset)]
+    [state (concat appends reset)]))
+
+
+; TODO: RPC, not messages
 )
