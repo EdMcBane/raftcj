@@ -109,17 +109,17 @@
         apply-to-fsm state 
         (map :cmd (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index))))))
 
-  (defn highest-majority [match-indexes]
+  (defn highest-majority [match-indexes commit-index]
     (let [
       indexes (vals match-indexes)
-      count-ge #(count (filter (partial (>= %) indexes)))
-      is-majority (partial > (/ (count config) 2))
+      count-ge #(count (filter (partial <= %) indexes))
+      is-majority #(> (inc %) (/ (count config) 2))
       ]
-    (max (filter is-majority (map count-ge indexes)))))
+    (reduce max commit-index (filter (comp is-majority count-ge) indexes))))
 
-  (defn new-commit-index [current-term log commit-index]
+  (defn new-commit-index [current-term log match-index commit-index]
     (let [
-      uncommitted-replicated-indexes (range highest-majority (dec commit-index) -1)
+      uncommitted-replicated-indexes (range (highest-majority match-index commit-index) commit-index -1)
       is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
       (first (filter is-from-current-term uncommitted-replicated-indexes))))
 
@@ -130,13 +130,15 @@
       [(become-follower state term) []]
       (if success
         (let [
-          state (assoc-in (assoc-in state [:next-index appender] next-index) [:match-index appender] next-index)
-          commit-index (new-commit-index (:term state) (:log state) (:commit-index state))
+          state (assoc-in (assoc-in state [:next-index appender] next-index) [:next-match appender] next-index)
+          commit-index (if-let 
+            [updated (new-commit-index (:current-term state) (:log state) (:next-match state) (:commit-index state))]
+            updated (:commit-index state))
           state (assoc state :commit-index commit-index)]
-          [state []]
+          [state []])
         [(assoc-in state [:next-index appender] (dec next-index))
           (update-msg state appender (dec next-index))]
-      ))))
+      )))
 
   (defmulti append-entries state-of)
   (defmethod append-entries :follower [state term leader-id prev-log-index prev-log-term entries leader-commit]
@@ -172,7 +174,7 @@
     reset (msg beat reset)]
     [state (concat heartbeats reset)]))
 
-  (defn update-msg [[state peer idx]]
+  (defn update-msg [state peer idx]
     (let [
       prev-log-index (dec idx)
       prev-log-entry (get (:log state) prev-log-index)
