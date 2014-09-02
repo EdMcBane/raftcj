@@ -25,12 +25,12 @@
 
   (defn become-leader [state]
     (let [
-    [_ last-log-index] (last-log state)
-    to-entry #(vector % (inc last-log-index))
-    others (filter #(not (= (:id state) %)) (keys config))
-    next-index (into {} (map to-entry others))
-    next-match (into {} (map #(vector % 0) others))]
-    (assoc (assoc (assoc state :next-index next-index) :next-match next-match) :statename :leader)))
+      [_ last-log-index] (last-log state)
+      to-entry #(vector % (inc last-log-index))
+      others (filter #(not (= (:id state) %)) (keys config))
+      next-index (into {} (map to-entry others))
+      next-match (into {} (map #(vector % 0) others))]
+      (assoc (assoc (assoc state :next-index next-index) :next-match next-match) :statename :leader)))
 
   (declare elected)
 
@@ -56,8 +56,8 @@
          (has-vote state candidate-id)
          (up-to-date state last-log-term last-log-index))
         [(vote state candidate-id) [
-          (msg candidate-id voted (:current-term state) (:id state) true)
-          (msg timer reset (:id state))]]
+        (msg candidate-id voted (:current-term state) (:id state) true)
+        (msg timer reset (:id state))]]
         [state [(msg candidate-id voted (:current-term state) (:id state) false)]]))))
 
 
@@ -87,7 +87,7 @@
       (if (= x y)
         (recur xs ys (conj acc x))
         (recur nil ys (conj acc y)))))
-    ([orig newer] (update-or-append orig newer [])))
+  ([orig newer] (update-or-append orig newer [])))
 
   (defn update-log [log prev-log-index entries] 
     (let [
@@ -115,7 +115,7 @@
       count-ge #(count (filter (partial <= %) indexes))
       is-majority #(> (inc %) (/ (count config) 2))
       ]
-    (reduce max commit-index (filter (comp is-majority count-ge) indexes))))
+      (reduce max commit-index (filter (comp is-majority count-ge) indexes))))
 
   (defn new-commit-index [current-term log match-index commit-index]
     (let [
@@ -123,63 +123,75 @@
       is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
       (first (filter is-from-current-term uncommitted-replicated-indexes))))
 
+;TODO: check all redispatches after state change
   (declare update-msg)
   (defmulti appended state-of)
   (defmethod appended :default [state term appender next-index success]
-    (if (> term (:current-term state))
-      [(become-follower state term) []]
-      (if success
-        (let [
+    (cond
+      (> term (:current-term state))
+      [(become-follower state term) []] 
+      
+      success
+      (let [
           state (assoc-in (assoc-in state [:next-index appender] next-index) [:next-match appender] next-index)
           commit-index (if-let 
             [updated (new-commit-index (:current-term state) (:log state) (:next-match state) (:commit-index state))]
             updated (:commit-index state))
           state (assoc state :commit-index commit-index)]
           [state []])
-        [(assoc-in state [:next-index appender] (dec next-index))
-          (update-msg state appender (dec next-index))]
-      )))
+
+      :else
+      [(assoc-in state [:next-index appender] (dec next-index))
+      (update-msg state appender (dec next-index))]))
 
   (defmulti append-entries state-of)
   (defmethod append-entries :follower [state term leader-id prev-log-index prev-log-term entries leader-commit]
-    (if (> term (:current-term state))
+    (cond 
+      (> term (:current-term state))
       (append-entries 
         (become-follower state term) 
         term leader-id prev-log-index prev-log-term entries leader-commit)
-      (if (< term (:current-term state))
-        [state [(msg leader-id appended (:current-term state) (:id state) false)]]
-        (let [
-          local-prev-log (get (:log state) prev-log-index)]
-          (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log))))
-            [state [
-              (msg leader-id appended (:current-term state) (:id state) false)
-              (msg timer reset (:id state))]]
-            [(append-log state prev-log-index entries leader-commit) [
-              (msg leader-id appended (:current-term state) (:id state) true)
-              (msg timer reset (:id state))]])))))
+      
+      (< term (:current-term state))
+      [state [(msg leader-id appended (:current-term state) (:id state) false)]]
+      
+      :else
+      (let [
+        local-prev-log (get (:log state) prev-log-index)]
+        (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log))))
+          [state [
+          (msg leader-id appended (:current-term state) (:id state) false)
+          (msg timer reset (:id state))]]
+          [(append-log state prev-log-index entries leader-commit) [
+          (msg leader-id appended (:current-term state) (:id state) true)
+          (msg timer reset (:id state))]]))))
 
   (defmethod append-entries :candidate [state term leader-id prev-log-index prev-log-term entries leader-commit]
-    (if (> term (:current-term state))
+    (cond 
+      (> term (:current-term state))
       (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit)
-      (if (< term (:current-term state))
-        [state [(msg leader-id appended (:current-term state) (:id state) false)]]
-        (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit))))
+      
+      (< term (:current-term state))
+      [state [(msg leader-id appended (:current-term state) (:id state) false)]]
+      
+      :else
+      (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit)))
 
   (defn elected [state]
     (let [
-    [prev-log-entry prev-log-index] (last-log state)
-    heartbeats (vec (map 
-      (fn [[peer _]] (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) [] (:commit-index state)))
-      (:next-index state)))
-    reset (msg beat reset)]
-    [state (concat heartbeats reset)]))
+      [prev-log-entry prev-log-index] (last-log state)
+      heartbeats (vec (map 
+        (fn [[peer _]] (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) [] (:commit-index state)))
+        (:next-index state)))
+      reset (msg beat reset)]
+      [state (concat heartbeats reset)]))
 
   (defn update-msg [state peer idx]
     (let [
       prev-log-index (dec idx)
       prev-log-entry (get (:log state) prev-log-index)
       entries (subvec (:log state) idx)]
-    (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) entries (:commit-index state))))
+      (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) entries (:commit-index state))))
 
   (defn executed [client cmd] :todo)
 
