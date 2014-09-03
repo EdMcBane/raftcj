@@ -252,8 +252,9 @@
     (testing "yields highest replicated uncommited index"
         (is (= 2 (new-commit-index 0 [{:term 0} {:term 0} {:term 0}] [2 2 2] 0))))
     (testing "yields highest replicated uncommited index from current term"
-        (is (= 1 (new-commit-index 1 [{:term 0} {:term 1} {:term 2}] [2 2 2] 0)))))
-
+        (is (= 1 (new-commit-index 1 [{:term 0} {:term 1} {:term 2}] [2 2 2] 0))))
+    (testing "self participates in voting with highest log index"
+        (is (= 1 (new-commit-index 0 [{:term 0} {:term 0}] [2 2 1] 0)))))
 
 (deftest appended-test
     (testing "leader becomes follower if higher term"
@@ -311,10 +312,6 @@
             [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)
             [reply [target type args]] msgs]
                 (is (= reset type)))))
-
-
-
-
 
 ; TODO: what does it mean to "retry" in case of timeout?
 

@@ -120,7 +120,7 @@
   ; TODO simplify by handling match-index for self like everybody else ?
   (defn new-commit-index [current-term log indexes commit-index]
     (let [
-      local-match-index (count log)
+      local-match-index (dec (count log))
       highest-uncommited-majority (highest-majority (conj indexes local-match-index) commit-index)
       uncommitted-replicated-indexes (range highest-uncommited-majority commit-index -1)
       is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
