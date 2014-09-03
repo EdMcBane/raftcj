@@ -28,7 +28,17 @@
     (testing ":current-term is new term on becoming follower"
         (let [
             [state msgs] (become-follower (initial-state 0) a-term)]
-            (is (= a-term (:current-term state))))))
+            (is (= a-term (:current-term state)))))
+    (testing "notifies clients of failure of pending requests"
+        (let [
+            state (assoc-in (initial-state 0) [:client-reqs 0] :a-client)
+            [_ msgs] (become-follower state a-term)]
+            (is (some #(= :a-client (first %)) msgs))))
+    (testing "cleans up pending requests"
+        (let [
+            state (assoc-in (initial-state 0) [:client-reqs 0] :a-client)
+            [state _] (become-follower state a-term)]
+            (is (nil? (:client-reqs state))))))
 
 (deftest msg-test :todo :really?)
 (deftest vote-test 

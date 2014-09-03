@@ -12,7 +12,7 @@
     (let [
       outstanding-reqs (:client-reqs state)
       state (dissoc (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower) :client-reqs)]
-      [state (vec (map (fn [idx client] (msg client executed false)) outstanding-reqs))])) ; TODO: test dissoc, msgs to clients
+      [state (vec (map (fn [[idx client]] (msg client executed false)) outstanding-reqs))])) ; TODO: test dissoc, msgs to clients
 
   (defn majority [cluster votes]
     (do 
