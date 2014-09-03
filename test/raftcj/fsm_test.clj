@@ -291,9 +291,13 @@
             state (assoc (become-leader (initial-state 0)) :log [{:term 0} {:term 0} {:term 0}])
             [state, msgs] (appended state 0 a-candidate-id 2 true)
             [state, msgs] (appended state 0 another-candidate-id 2 true)]
-            (do
-                (is (= 2 (:commit-index state)))
-                ))))
+            (is (= 2 (:commit-index state)))))
+    (testing "notifies success to clients on commit-index update"
+        (let [
+            state (assoc-in (assoc (become-leader (initial-state 0)) :log [{:term 0} {:term 0} {:term 0}]) [:client-reqs 1] :a-client)
+            [state, msgs] (appended state 0 a-candidate-id 2 true)
+            [state, msgs] (appended state 0 another-candidate-id 2 true)]
+            (is (some #(= :a-client (first %)) msgs)))))
 
 (deftest append-entries-test
     (testing "candidate becomes follower if higher term"

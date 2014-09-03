@@ -12,7 +12,7 @@
     (let [
       outstanding-reqs (:client-reqs state)
       state (dissoc (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower) :client-reqs)]
-      [state (vec (map (fn [[idx client]] (msg client executed false)) outstanding-reqs))])) ; TODO: test dissoc, msgs to clients
+      [state (vec (map (fn [[idx client]] (msg client executed false)) outstanding-reqs))]))
 
   (defn majority [cluster votes]
     (do 
@@ -154,8 +154,11 @@
           commit-index (if-let 
             [updated (new-commit-index (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
           updated old-commit-index)
-          state (assoc state :commit-index commit-index)]
-          [state (vec (map #(msg % executed true) (range commit-index old-commit-index -1)))]) ; TODO: test
+          state (assoc state :commit-index commit-index)
+          msgs (vec (map ; TODO: refactor out
+            #(msg % executed true) 
+            (filter (complement nil?) (map (partial get (:client-reqs state)) (range commit-index old-commit-index -1)))))]
+          [state msgs])
 
       :else
       [(assoc-in state [:next-index appender] (dec next-index))
@@ -178,11 +181,11 @@
         local-prev-log (get (:log state) prev-log-index)]
         (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log))))
           [state [
-          (msg leader-id appended (:current-term state) (:id state) false)
-          (msg timer reset (:id state))]]
+            (msg leader-id appended (:current-term state) (:id state) false)
+            (msg timer reset (:id state))]]
           [(append-log state prev-log-index entries leader-commit) [
-          (msg leader-id appended (:current-term state) (:id state) true)
-          (msg timer reset (:id state))]]))))
+            (msg leader-id appended (:current-term state) (:id state) true)
+            (msg timer reset (:id state))]]))))
 
   (defmethod append-entries :candidate [state term leader-id prev-log-index prev-log-term entries leader-commit]
     (cond 
