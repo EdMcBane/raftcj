@@ -1,36 +1,15 @@
 # raftcj
 
-FIXME: description
+[Raft consensus algorithm](https://ramcloud.stanford.edu/wiki/download/attachments/11370504/raft.pdf), implemented in clojure.
 
-## Installation
+## Installation & Usage
 
-Download from http://example.com/FIXME.
-
-## Usage
-
-FIXME: explanation
-
-    $ java -jar raftcj-0.1.0-standalone.jar [args]
-
-## Options
-
-FIXME: listing of options this app accepts.
-
-## Examples
-
-...
+clone & 'lein test'
 
 ### Bugs
 
-...
-
-### Any Other Sections
-### That You Think
-### Might be Useful
+Still work in progress, lots of them
 
 ## License
 
-Copyright © 2014 FIXME
-
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
+Copyright © 2014 Francesco Degrassi
