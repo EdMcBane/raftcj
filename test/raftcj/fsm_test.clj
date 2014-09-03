@@ -234,7 +234,26 @@
             after (append-log before 0 entries 2)]
             (is (= 3 (:commit-index after))))))
 
-; TODO test dependencies (highest-majority, etc)
+(deftest highest-majority-test 
+    (testing "yields default value when no majority is present"
+        (is (= 0 (highest-majority [1 2] 0))))
+    (testing "yields default on empty vector"
+        (is (= 0 (highest-majority [] 0))))
+    (testing "yields majority if present"
+        (is (= 1 (highest-majority [1 1 2] 0))))
+    (testing "yields highest majority if present"
+        (is (= 2 (highest-majority [1 1 2 2 2] 0)))))
+
+(deftest new-commit-index-test 
+    (testing "yields nil on no majority"
+        (is (nil? (new-commit-index 0 [{:term 0}] [] 0))))
+    (testing "yields replicated uncommited index"
+        (is (= 1 (new-commit-index 0 [{:term 0} {:term 0} {:term 0}] [1 1 1] 0))))
+    (testing "yields highest replicated uncommited index"
+        (is (= 2 (new-commit-index 0 [{:term 0} {:term 0} {:term 0}] [2 2 2] 0))))
+    (testing "yields highest replicated uncommited index from current term"
+        (is (= 1 (new-commit-index 1 [{:term 0} {:term 1} {:term 2}] [2 2 2] 0)))))
+
 
 (deftest appended-test
     (testing "leader becomes follower if higher term"

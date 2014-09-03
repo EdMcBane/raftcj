@@ -109,17 +109,20 @@
         apply-to-fsm state 
         (map :cmd (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index))))))
 
-  (defn highest-majority [match-indexes commit-index]
-    (let [
-      indexes (vals match-indexes)
-      count-ge #(count (filter (partial <= %) indexes))
-      is-majority #(> (inc %) (/ (count config) 2))
-      ]
-      (reduce max commit-index (filter (comp is-majority count-ge) indexes))))
 
-  (defn new-commit-index [current-term log match-index commit-index]
+  (defn highest-majority [indexes fallback]
     (let [
-      uncommitted-replicated-indexes (range (highest-majority match-index commit-index) commit-index -1)
+      count-ge #(count (filter (partial <= %) indexes))
+      is-majority #(> % (/ (count config) 2))
+      ]
+      (reduce max fallback (filter (comp is-majority count-ge) (set indexes)))))
+
+  ; TODO simplify by handling match-index for self like everybody else ?
+  (defn new-commit-index [current-term log indexes commit-index]
+    (let [
+      local-match-index (count log)
+      highest-uncommited-majority (highest-majority (conj indexes local-match-index) commit-index)
+      uncommitted-replicated-indexes (range highest-uncommited-majority commit-index -1)
       is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
       (first (filter is-from-current-term uncommitted-replicated-indexes))))
 
@@ -135,7 +138,7 @@
       (let [
           state (assoc-in (assoc-in state [:next-index appender] next-index) [:next-match appender] next-index)
           commit-index (if-let 
-            [updated (new-commit-index (:current-term state) (:log state) (:next-match state) (:commit-index state))]
+            [updated (new-commit-index (:current-term state) (:log state) (vals (:next-match state)) (:commit-index state))]
             updated (:commit-index state))
           state (assoc state :commit-index commit-index)]
           [state []])
