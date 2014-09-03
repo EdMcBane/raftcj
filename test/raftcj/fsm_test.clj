@@ -18,11 +18,17 @@
 
 (deftest become-follower-test
     (testing ":statename is :follower on becoming follower"
-        (is (= :follower (:statename (become-follower (initial-state 0) a-term)))))
+        (let [
+            [state msgs] (become-follower (initial-state 0) a-term)]
+            (is (= :follower (:statename state)))))
     (testing ":voted-for is nil on becoming follower"
-        (is (nil? (:voted-for (become-follower (assoc (initial-state 0) :voted-for a-candidate-id) a-term)))))
+        (let [
+            [state msgs] (become-follower (assoc (initial-state 0) :voted-for a-candidate-id) a-term)]
+            (is (nil? (:voted-for state)))))
     (testing ":current-term is new term on becoming follower"
-        (is (= a-term (:current-term (become-follower (initial-state 0) a-term))))))
+        (let [
+            [state msgs] (become-follower (initial-state 0) a-term)]
+            (is (= a-term (:current-term state))))))
 
 (deftest msg-test :todo :really?)
 (deftest vote-test 

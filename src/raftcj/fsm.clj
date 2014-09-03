@@ -3,12 +3,16 @@
   (:require  [raftcj.core :refer :all]))
 (defn fsm [config]
 
-  (defmulti become-follower state-of)
-  (defmethod become-follower :default [state term]
-    (dissoc (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower) :client-reqs)) ; TODO: test dissoc
-
   (defn msg [target type & args]
     (concat [target type] args))
+  (declare executed)
+
+  (defmulti become-follower state-of)
+  (defmethod become-follower :default [state term]
+    (let [
+      outstanding-reqs (:client-reqs state)
+      state (dissoc (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower) :client-reqs)]
+      [state (vec (map (fn [idx client] (msg client executed false)) outstanding-reqs))])) ; TODO: test dissoc, msgs to clients
 
   (defn majority [cluster votes]
     (do 
@@ -37,7 +41,7 @@
   (defmulti voted state-of)
   (defmethod voted :default [state term voter granted]
     (if (> term (:current-term state))
-      [(become-follower state term) []]
+      (become-follower state term)
       (if (and granted (contains? config voter)) ; TODO: move part-of-cluster check logic outside ?
         (let
           [state (update-in state [:votes] #(conj % voter))]
@@ -46,12 +50,20 @@
             [state []]))
         [state []])))
 
+  (defn redispatch [[state, msgs] event & args]
+    (let [
+      [state, moremsgs] (apply (partial event state) args)]
+      [state (concat msgs moremsgs)]))
+
   (defmulti request-vote state-of)
   (defmethod request-vote :default [state term candidate-id last-log-index last-log-term]
     (if (< term (:current-term state))
       [state [(msg candidate-id voted (:current-term state) (:id state) false)]]
       (if (> term (:current-term state))
-        (request-vote (become-follower state term) term candidate-id last-log-index last-log-term)
+        (redispatch
+          (become-follower state term)
+          request-vote
+          term candidate-id last-log-index last-log-term)
         (if (and
          (has-vote state candidate-id)
          (up-to-date state last-log-term last-log-index))
@@ -133,7 +145,7 @@
   (defmethod appended :default [state term appender next-index success]
     (cond
       (> term (:current-term state))
-      [(become-follower state term) []] 
+      (become-follower state term)
       
       success
       (let [
@@ -153,8 +165,9 @@
   (defmethod append-entries :follower [state term leader-id prev-log-index prev-log-term entries leader-commit]
     (cond 
       (> term (:current-term state))
-      (append-entries 
-        (become-follower state term) 
+      (redispatch
+        (become-follower state term)
+        append-entries
         term leader-id prev-log-index prev-log-term entries leader-commit)
       
       (< term (:current-term state))
@@ -174,13 +187,19 @@
   (defmethod append-entries :candidate [state term leader-id prev-log-index prev-log-term entries leader-commit]
     (cond 
       (> term (:current-term state))
-      (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit)
-      
+      (redispatch
+        (become-follower state term)
+        append-entries
+        term leader-id prev-log-index prev-log-term entries leader-commit)
+
       (< term (:current-term state))
       [state [(msg leader-id appended (:current-term state) (:id state) false)]]
       
       :else
-      (append-entries (become-follower state term) term leader-id prev-log-index prev-log-term entries leader-commit)))
+      (redispatch
+        (become-follower state term)
+        append-entries
+        term leader-id prev-log-index prev-log-term entries leader-commit)))
 
   (defn elected [state]
     (let [
