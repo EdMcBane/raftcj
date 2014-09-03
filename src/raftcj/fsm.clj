@@ -5,9 +5,9 @@
 
   (defmulti become-follower state-of)
   (defmethod become-follower :default [state term]
-    (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower))
+    (dissoc (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower) :client-reqs)) ; TODO: test dissoc
 
-  (defn msg [target type & args] 
+  (defn msg [target type & args]
     (concat [target type] args))
 
   (defn majority [cluster votes]
@@ -128,6 +128,7 @@
 
 ;TODO: check all redispatches after state change
   (declare update-msg)
+  (declare executed)
   (defmulti appended state-of)
   (defmethod appended :default [state term appender next-index success]
     (cond
@@ -137,11 +138,12 @@
       success
       (let [
           state (assoc-in (assoc-in state [:next-index appender] next-index) [:next-match appender] next-index)
+          old-commit-index (:commit-index state)
           commit-index (if-let 
-            [updated (new-commit-index (:current-term state) (:log state) (vals (:next-match state)) (:commit-index state))]
-            updated (:commit-index state))
+            [updated (new-commit-index (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
+          updated old-commit-index)
           state (assoc state :commit-index commit-index)]
-          [state []])
+          [state (vec (map #(msg % executed true) (range commit-index old-commit-index -1)))]) ; TODO: test
 
       :else
       [(assoc-in state [:next-index appender] (dec next-index))
@@ -196,13 +198,15 @@
       entries (subvec (:log state) idx)]
       (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) entries (:commit-index state))))
 
-  (defn executed [client cmd] :todo)
+  (defn executed [client success] 
+    :todo)
 
   (defmulti execute state-of)
   (defmethod execute :leader [state client cmd]
     (let [
       state (update-in state [:log] #(conj % {:term (:current-term state) :cmd cmd}))
       [_ last-log-index] (last-log state)
+      state (update-in state [:client-reqs last-log-index] client)
       needing-update (filter (fn [peer idx] (>= last-log-index idx)) (:next-index state))
       updates (vec (map (partial update-msg state) needing-update))]
       [state updates]))
