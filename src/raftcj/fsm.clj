@@ -1,8 +1,10 @@
 (ns raftcj.fsm
   (:require clojure.string)
   (:require  [raftcj.core :refer :all]))
-(defn fsm [config]
 
+(defn fsm [config]
+  (let [
+    members (:members config)]
   (defn msg [target type & args]
     (concat [target type] args))
   (declare executed)
@@ -11,8 +13,10 @@
   (defmethod become-follower :default [state term]
     (let [
       outstanding-reqs (:client-reqs state)
-      state (dissoc (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower) :client-reqs)]
-      [state (vec (map (fn [[idx client]] (msg client executed false)) outstanding-reqs))]))
+      state (dissoc (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower) :client-reqs)
+      reset-msg (msg timer reset (:id state) (:election-delay config))
+      reply-msgs  (vec (map (fn [[idx client]] (msg client executed false)) outstanding-reqs))]
+      [state (vec (conj reply-msgs reset-msg))]))
 
   (defn majority [cluster votes]
     (do 
@@ -31,7 +35,7 @@
     (let [
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
-      others (filter #(not (= (:id state) %)) (keys config))
+      others (filter #(not (= (:id state) %)) (keys members))
       next-index (into {} (map to-entry others))
       next-match (into {} (map #(vector % 0) others))]
       (assoc (assoc (assoc state :next-index next-index) :next-match next-match) :statename :leader)))
@@ -42,10 +46,10 @@
   (defmethod voted :default [state term voter granted]
     (if (> term (:current-term state))
       (become-follower state term)
-      (if (and granted (contains? config voter)) ; TODO: move part-of-cluster check logic outside ?
+      (if (and granted (contains? members voter)) ; TODO: move part-of-cluster check logic outside ?
         (let
           [state (update-in state [:votes] #(conj % voter))]
-          (if (majority config (:votes state))
+          (if (majority members (:votes state))
             (elected (become-leader state))
             [state []]))
         [state []])))
@@ -69,7 +73,7 @@
          (up-to-date state last-log-term last-log-index))
         [(vote state candidate-id) [
         (msg candidate-id voted (:current-term state) (:id state) true)
-        (msg timer reset (:id state))]]
+        (msg timer reset (:id state) (:election-delay config))]]
         [state [(msg candidate-id voted (:current-term state) (:id state) false)]]))))
 
 
@@ -86,12 +90,15 @@
       state (vote state (:id state))
       [state msgs] (voted state (:current-term state) (:id state) true)]
       [state, (concat
-        [(msg timer reset)]
+        [(msg timer reset (:id state) (:election-delay config))]
         (map
          #(apply msg (concat [% request-vote] (map state [:current-term :id :last-log-index :last-log-term])))
-         (filter #(not (= (:id state) %)) (keys config)))
+         (filter #(not (= (:id state) %)) (keys members)))
         msgs)]
       ))
+
+  (defmethod timeout :leader [state] ; TODO: test
+    (elected state))
 
   (defn update-or-append ([[x & xs :as orig][y & ys] acc]
     (if (nil? y)
@@ -125,7 +132,7 @@
   (defn highest-majority [indexes fallback]
     (let [
       count-ge #(count (filter (partial <= %) indexes))
-      is-majority #(> % (/ (count config) 2))
+      is-majority #(> % (/ (count members) 2))
       ]
       (reduce max fallback (filter (comp is-majority count-ge) (set indexes)))))
 
@@ -182,10 +189,10 @@
         (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log))))
           [state [
             (msg leader-id appended (:current-term state) (:id state) false)
-            (msg timer reset (:id state))]]
+            (msg timer reset (:id state) (:election-delay config))]]
           [(append-log state prev-log-index entries leader-commit) [
             (msg leader-id appended (:current-term state) (:id state) true)
-            (msg timer reset (:id state))]]))))
+            (msg timer reset (:id state)(:election-delay config))]]))))
 
   (defmethod append-entries :candidate [state term leader-id prev-log-index prev-log-term entries leader-commit]
     (cond 
@@ -210,8 +217,8 @@
       heartbeats (vec (map 
         (fn [[peer _]] (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) [] (:commit-index state)))
         (:next-index state)))
-      reset (msg beat reset)]
-      [state (concat heartbeats reset)]))
+      reset (msg timer reset (:id state) (:heartbeat-delay members))]
+      [state (conj heartbeats reset)]))
 
   (defn update-msg [state peer idx]
     (let [
@@ -232,8 +239,4 @@
       needing-update (filter (fn [peer idx] (>= last-log-index idx)) (:next-index state))
       updates (vec (map (partial update-msg state) needing-update))]
       [state updates]))
-
-
-
-; TODO: RPC, not messages
-)
+)) ; TODO: RPC, not messages

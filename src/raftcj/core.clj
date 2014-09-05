@@ -30,5 +30,4 @@
 (defn state-of [state & args] (:statename state))
 
 (def timer :todo)
-(def beat :todo)
-(defn reset [candidate-id] :todo)
+(defn reset [candidate-id delay] :todo)

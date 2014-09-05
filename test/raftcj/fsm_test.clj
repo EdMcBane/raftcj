@@ -3,11 +3,15 @@
             [raftcj.core :refer :all]
             [raftcj.fsm :refer :all]))
 
-(def config {0 "127.0.0.1"
-             12 "127.0.0.2"
-             23 "127.0.0.3"
-             34 "127.0.0.4"
-             45 "127.0.0.5"})
+(def config {
+    :heartbeat-delay 1
+    :election-delay  3
+    :members {
+        0 "127.0.0.1"
+        12 "127.0.0.2"
+        23 "127.0.0.3"
+        34 "127.0.0.4"
+        45 "127.0.0.5"}})
 
 (fsm config)
 
@@ -129,8 +133,8 @@
     (testing "grants vote if higher term"
         (let [
             [before, msgs] (timeout (initial-state 0))
-            [after, [[target type & args]]] (request-vote before 43 a-candidate-id 0 0)]
-            (is (true? (last args)))))
+            [after msgs] (request-vote before 43 a-candidate-id 0 0)]
+            (is (some (fn [[target type & args]] (and (= voted type) (true? (last args)))) msgs))))
      (testing "denies vote otherwise"
         (let [
             [before, msgs] (timeout (initial-state 0))
@@ -313,25 +317,23 @@
     (testing "replies with failure if referencing non-existent prev-log-entry"
         (let [
             [before msgs] (timeout (initial-state 0))
-            [after, [msg]] (append-entries before 1 a-candidate-id 1 1 [] 0)]
-            (is (= false (last msg)))))
+            [after, msgs] (append-entries before 1 a-candidate-id 1 1 [] 0)]
+            (is (some #(= false (last %)) msgs))))
     (testing "resets timer if referencing non-existent prev-log-entry"
         (let [
             [before msgs] (timeout (initial-state 0))
-            [after, msgs] (append-entries before 1 a-candidate-id 1 1 [] 0)
-            [reply [target type args]] msgs]
-                (is (= reset type))))
+            [after, msgs] (append-entries before 1 a-candidate-id 1 1 [] 0)]
+            (is (some (fn [[target type args]] (= reset type)) msgs))))
      (testing "replies with success if referencing existing prev-log-entry"
         (let [
             [before msgs] (timeout (initial-state 0))
-            [after, [msg]] (append-entries before 1 a-candidate-id 0 0 [] 0)]
-            (is (= true (last msg)))))
+            [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)]
+            (is (some #(= true (last %)) msgs))))
      (testing "resets timer on successful append-entries"
         (let [
             [before msgs] (timeout (initial-state 0))
-            [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)
-            [reply [target type args]] msgs]
-                (is (= reset type)))))
+            [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)]
+            (is (some (fn [[target type args]] (= reset type)) msgs)))))
 
 ; TODO: what does it mean to "retry" in case of timeout?
 
