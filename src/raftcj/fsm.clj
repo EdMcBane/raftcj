@@ -53,19 +53,25 @@
 
   (defmulti voted state-of)
   (defmethod voted :default [state term voter granted]
-    (if (> term (:current-term state))
+    (cond 
+      (> term (:current-term state))
       (redispatch
           (become-follower state term)
           voted
           term voter granted)
-      (if (not granted) 
-        [state []]
-        (let
-          [state (update-in state [:votes] #(conj % voter))]
-          (if (majority members (:votes state))
-            (elected (become-leader state))
-            [state []]))
-        )))
+      
+      (< term (:current-term state))
+      [state []]
+      
+      (not granted)
+      [state []]
+      
+      :else
+      (let
+        [state (update-in state [:votes] #(conj % voter))]
+        (if (majority members (:votes state))
+          (elected (become-leader state))
+          [state []]))))
 
   ; TODO: macro to reply false on old term?
 

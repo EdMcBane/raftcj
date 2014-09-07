@@ -171,6 +171,11 @@
             [before, msgs] (timeout (initial-state 0))
             [after, [msg]] (voted before 1 a-candidate-id false)]
             (is (not (contains? (:votes after) a-candidate-id)))))
+    (testing "candidate does not accumulate votes for older terms"
+        (let [
+            [before, msgs] (timeout (initial-state 0))
+            [after, [msg]] (voted before 0 a-candidate-id true)]
+            (is (not (contains? (:votes after) a-candidate-id)))))
     ; (testing "candidate ignores votes from servers not part of cluster"
     ;     (let [
     ;         [before, msgs] (timeout (initial-state 0))
@@ -186,8 +191,8 @@
     (testing "candidate becomes leader on majority"
         (let [
             [state, msgs] (timeout (initial-state 0))
-            [state, [msg]] (voted state 0 12 true)
-            [state, [msg]] (voted state 0 23 true)]
+            [state, [msg]] (voted state 1 12 true)
+            [state, [msg]] (voted state 1 23 true)]
             (is (= :leader (:statename state))))
         ))
 
