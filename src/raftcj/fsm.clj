@@ -9,8 +9,7 @@
     (concat [target type] args))
   (declare executed)
 
-  (defmulti become-follower state-of)
-  (defmethod become-follower :default [state term]
+  (defn become-follower [state term]
     (let [
       outstanding-reqs (:client-reqs state)
       state (assoc state :current-term term)
@@ -45,10 +44,20 @@
 
   (declare elected)
 
+  (defn redispatch [[state, msgs] event & args]
+    (let [
+      [state, moremsgs] (apply (partial event state) args)]
+      [state (concat msgs moremsgs)]))
+  
+  ; TODO: macro?
+
   (defmulti voted state-of)
   (defmethod voted :default [state term voter granted]
     (if (> term (:current-term state))
-      (become-follower state term)
+      (redispatch
+          (become-follower state term)
+          voted
+          term voter granted)
       (if (and granted (contains? members voter)) ; TODO: move part-of-cluster check logic outside ?
         (let
           [state (update-in state [:votes] #(conj % voter))]
@@ -56,11 +65,6 @@
             (elected (become-leader state))
             [state []]))
         [state []])))
-
-  (defn redispatch [[state, msgs] event & args]
-    (let [
-      [state, moremsgs] (apply (partial event state) args)]
-      [state (concat msgs moremsgs)]))
 
   (defmulti request-vote state-of)
   (defmethod request-vote :default [state term candidate-id last-log-index last-log-term]
@@ -156,8 +160,11 @@
   (defmethod appended :default [state term appender next-index success]
     (cond
       (> term (:current-term state))
-      (become-follower state term)
-      
+      (redispatch
+          (become-follower state term)
+          appended
+          term appender next-index success)
+
       success
       (let [
           state (assoc-in (assoc-in state [:next-index appender] next-index) [:next-match appender] next-index)
