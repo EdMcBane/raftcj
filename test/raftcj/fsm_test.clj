@@ -333,7 +333,17 @@
         (let [
             [before msgs] (timeout (initial-state 0))
             [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)]
-            (is (some (fn [[target type args]] (= reset type)) msgs)))))
+            (is (some (fn [[target type args]] (= reset type)) msgs))))
+     (testing "applies committed commands to fsm"
+        (let [
+            before (initial-state 0)
+            [after, msgs] (append-entries before 0 a-candidate-id 0 0 [{:term 0 :cmd "mario"}, {:term 0 :cmd "luigi"}] 1)]
+            (is (= ["mario"] (:fsm after)))))
+     (testing "applies committed commands to fsm"
+        (let [
+            before (initial-state 0)
+            [after, msgs] (append-entries before 0 a-candidate-id 0 0 [{:term 0 :cmd "mario"}] 1)]
+            (is (= 1 (:last-applied after))))))
 
 ; TODO: what does it mean to "retry" in case of timeout?
 

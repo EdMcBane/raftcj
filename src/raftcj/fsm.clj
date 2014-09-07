@@ -123,7 +123,8 @@
       [_, last-log-index] (last-log state)
       new-commit-index (max commit-index (min leader-commit last-log-index))
       state (assoc state :commit-index new-commit-index)
-      apply-to-fsm (fn [state, cmd] (update-in state [:fsm] #(conj % cmd)))]
+      fsm-fn (fn [current cmd] (conj current cmd))
+      apply-to-fsm (fn [state, cmd] (update-in (update-in state [:fsm] #(fsm-fn % cmd)) [:last-applied] inc))]
       (reduce 
         apply-to-fsm state 
         (map :cmd (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index))))))
