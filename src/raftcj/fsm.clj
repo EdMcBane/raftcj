@@ -32,7 +32,7 @@
         (assert (or (nil? vote) (= candidate vote)))
         (assoc state :voted-for candidate))))
 
-  (defn become-leader [state]
+  (defn become-leader [state] ; TODO: change interface to return [state, []]
     (let [
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
@@ -179,7 +179,6 @@
       is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
       (first (filter is-from-current-term uncommitted-replicated-indexes))))
 
-  ;TODO: check all redispatches after state change
   (declare update-msg)
   (declare executed)
 
@@ -192,6 +191,9 @@
           appended
           term appender next-index success)
 
+      (< term (:current-term state))
+      [state []]
+      
       success
       (let [
           state (assoc-in (assoc-in state [:next-index appender] next-index) [:next-match appender] next-index)

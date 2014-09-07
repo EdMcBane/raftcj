@@ -295,6 +295,14 @@
                 (is (= 2 (get-in after [:next-index a-candidate-id])))
                 (is (= 2 (get-in after [:next-match a-candidate-id])))
                 )))
+    (testing "does not update peer next-index and match-index on older term"
+        (let [
+            [before _] (timeout (initial-state 0))
+            before (assoc (become-leader before) :log [{:term 0} {:term 0}])
+            [after, msgs] (appended before 0 a-candidate-id 2 true)]
+            (do
+                (is (= 1 (get-in after [:next-index a-candidate-id])))
+                (is (= 0 (get-in after [:next-match a-candidate-id]))))))
     (testing "updates commit-index on successful replication on majority"
         (let [
             state (assoc (become-leader (initial-state 0)) :log [{:term 0} {:term 0} {:term 0}])
