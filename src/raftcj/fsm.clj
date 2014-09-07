@@ -42,7 +42,7 @@
       state (assoc state :statename :leader)]
       state))
 
-  (declare elected)
+  (declare elected advertise-leader)
 
   (defn redispatch [[state, msgs] event & args]
     (let [
@@ -102,17 +102,15 @@
     (let [
       state (update-in state [:current-term] inc)
       state (vote state (:id state))
-      [state msgs] (voted state (:current-term state) (:id state) true)]
-      [state, (concat
-        [(msg timer reset (:id state) (:election-delay config))]
-        (map
+      [state msgs] (voted state (:current-term state) (:id state) true)
+      reset-msg (msg timer reset (:id state) (:election-delay config))
+      vote-reqs (map
          #(apply msg (concat [% request-vote] (map state [:current-term :id :last-log-index :last-log-term])))
-         (filter #(not (= (:id state) %)) (keys members)))
-        msgs)]
-      ))
+         (filter #(not (= (:id state) %)) (keys members)))]
+      [state, (concat [reset-msg] vote-reqs msgs)]))
 
   (defmethod timeout :leader [state] ; TODO: test
-    (elected state))
+    [state (advertise-leader state)])
 
   (defn update-or-append ([[x & xs :as orig][y & ys] acc]
     (if (nil? y)
@@ -229,14 +227,18 @@
         append-entries
         term leader-id prev-log-index prev-log-term entries leader-commit)))
 
-  (defn elected [state]
+
+  (defn advertise-leader [state]
     (let [
       [prev-log-entry prev-log-index] (last-log state)
       heartbeats (vec (map 
         (fn [[peer _]] (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) [] (:commit-index state)))
         (:next-index state)))
       reset (msg timer reset (:id state) (:heartbeat-delay members))]
-      [state (conj heartbeats reset)]))
+      (conj heartbeats reset)))
+
+  (defn elected [state]
+    [state (advertise-leader state)])
 
   (defn update-msg [state peer idx]
     (let [
