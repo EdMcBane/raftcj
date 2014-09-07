@@ -58,13 +58,14 @@
           (become-follower state term)
           voted
           term voter granted)
-      (if (and granted (contains? members voter)) ; TODO: move part-of-cluster check logic outside ?
+      (if (not granted) 
+        [state []]
         (let
           [state (update-in state [:votes] #(conj % voter))]
           (if (majority members (:votes state))
             (elected (become-leader state))
             [state []]))
-        [state []])))
+        )))
 
   ; TODO: macro to reply false on old term?
 
@@ -259,4 +260,7 @@
       needing-update (filter (fn [peer idx] (>= last-log-index idx)) (:next-index state))
       updates (vec (map (partial update-msg state) needing-update))]
       [state updates]))
-)) ; TODO: RPC, not messages
+)) 
+; TODO: RPC, not messages
+; TODO: create part-of-cluster check logic outside ?
+

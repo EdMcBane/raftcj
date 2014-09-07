@@ -171,12 +171,12 @@
             [before, msgs] (timeout (initial-state 0))
             [after, [msg]] (voted before 1 a-candidate-id false)]
             (is (not (contains? (:votes after) a-candidate-id)))))
-    (testing "candidate ignores votes from servers not part of cluster"
-        (let [
-            [before, msgs] (timeout (initial-state 0))
-            [after, [msg]] (voted before 1 :nonmember true)]
-            (is (not (contains? (:votes after) :nonmember))))
-        )
+    ; (testing "candidate ignores votes from servers not part of cluster"
+    ;     (let [
+    ;         [before, msgs] (timeout (initial-state 0))
+    ;         [after, [msg]] (voted before 1 :nonmember true)]
+    ;         (is (not (contains? (:votes after) :nonmember))))
+    ;     )
     (testing "candidate ignores votes from older terms"
         (let [
             [before, msgs] (timeout (initial-state 0))
