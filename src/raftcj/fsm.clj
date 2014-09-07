@@ -13,7 +13,10 @@
   (defmethod become-follower :default [state term]
     (let [
       outstanding-reqs (:client-reqs state)
-      state (dissoc (assoc (assoc (assoc state :current-term term) :voted-for nil) :statename :follower) :client-reqs)
+      state (assoc state :current-term term)
+      state (assoc state :voted-for nil)
+      state (assoc state :statename :follower)
+      state (dissoc state :client-reqs)
       reset-msg (msg timer reset (:id state) (:election-delay config))
       reply-msgs  (vec (map (fn [[idx client]] (msg client executed false)) outstanding-reqs))]
       [state (vec (conj reply-msgs reset-msg))]))
@@ -24,12 +27,11 @@
       (> (count votes) (/ (count cluster) 2))))
 
   (defn vote [state candidate]
-    (do 
-      (let [vote (:voted-for state)]
-        (assert (or 
-          (nil? vote) 
-          (= candidate vote))))
-      (assoc state :voted-for candidate)))
+    (let [
+      vote (:voted-for state)]
+      (do
+        (assert (or (nil? vote) (= candidate vote)))
+        (assoc state :voted-for candidate))))
 
   (defn become-leader [state]
     (let [
