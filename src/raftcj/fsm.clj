@@ -200,14 +200,14 @@
             [updated (new-commit-index (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
           updated old-commit-index)
           state (assoc state :commit-index commit-index)
-          msgs (vec (map ; TODO: refactor out
-            #(msg % executed true) 
-            (filter (complement nil?) (map (partial get (:client-reqs state)) (range commit-index old-commit-index -1)))))]
+          newly-committed (range commit-index old-commit-index -1)
+          outstanding-reqs (filter (complement nil?) (map (partial get (:client-reqs state)) newly-committed))
+          msgs (vec (map #(msg % executed true) outstanding-reqs))]
           [state msgs])
 
       :else
       [(assoc-in state [:next-index appender] (dec next-index))
-      (update-msg state appender (dec next-index))]))
+        (update-msg state appender (dec next-index))]))
 
   (defmulti append-entries state-of)
   (defmethod append-entries :follower [state term leader-id prev-log-index prev-log-term entries leader-commit]
