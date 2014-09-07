@@ -66,7 +66,7 @@
     (testing "statename becomes :candidate"
         (let [
             before (assoc (initial-state 0) :current-term 42)
-            after (become-candidate before)]
+            [after _] (become-candidate before)]
             (is (= :candidate (:statename after)))))
     (testing "votes are reset"
         (let [
@@ -82,7 +82,7 @@
             (is (= :candidate (:statename after)))))
     (testing "candidate stays candidate on timeout"
         (let [
-            before (become-candidate (initial-state 0))
+            [before, _] (become-candidate (initial-state 0))
             [after msgs] (timeout before)]
             (is (= :candidate (:statename after)))))
     (testing "candidate increments term on timeout"

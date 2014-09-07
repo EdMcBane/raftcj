@@ -49,7 +49,7 @@
       [state, moremsgs] (apply (partial event state) args)]
       [state (concat msgs moremsgs)]))
   
-  ; TODO: macro?
+  ; TODO: macro to redispatch on newer term?
 
   (defmulti voted state-of)
   (defmethod voted :default [state term voter granted]
@@ -66,6 +66,8 @@
             [state []]))
         [state []])))
 
+  ; TODO: macro to reply false on old term?
+
   (defmulti request-vote state-of)
   (defmethod request-vote :default [state term candidate-id last-log-index last-log-term]
     (if (< term (:current-term state))
@@ -78,18 +80,23 @@
         (if (and
          (has-vote state candidate-id)
          (up-to-date state last-log-term last-log-index))
-        [(vote state candidate-id) [
-        (msg candidate-id voted (:current-term state) (:id state) true)
-        (msg timer reset (:id state) (:election-delay config))]]
-        [state [(msg candidate-id voted (:current-term state) (:id state) false)]]))))
-
+          (let [
+            reply-msg (msg candidate-id voted (:current-term state) (:id state) true)
+            reset-msg (msg timer reset (:id state) (:election-delay config))]
+            [(vote state candidate-id) [reply-msg reset-msg]])
+          [state [(msg candidate-id voted (:current-term state) (:id state) false)]]))))
 
   (defn become-candidate [state]
-    (assoc (assoc state :statename :candidate) :votes #{}))
+    (let [
+      state (assoc state :statename :candidate) 
+      state (assoc state :votes #{})]
+      [state []]))
 
   (defmulti timeout state-of)
   (defmethod timeout :follower [state]
-    (timeout (become-candidate state)))
+    (redispatch 
+      (become-candidate state)
+      timeout))
 
   (defmethod timeout :candidate [state]
     (let [
