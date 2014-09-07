@@ -316,22 +316,22 @@
             (is (= false (last msg)))))
     (testing "replies with failure if referencing non-existent prev-log-entry"
         (let [
-            [before msgs] (timeout (initial-state 0))
-            [after, msgs] (append-entries before 1 a-candidate-id 1 1 [] 0)]
+            before (initial-state 0)
+            [after, msgs] (append-entries before 0 a-candidate-id 1 1 [] 0)]
             (is (some #(= false (last %)) msgs))))
     (testing "resets timer if referencing non-existent prev-log-entry"
         (let [
-            [before msgs] (timeout (initial-state 0))
+            before (initial-state 0)
             [after, msgs] (append-entries before 1 a-candidate-id 1 1 [] 0)]
             (is (some (fn [[target type args]] (= reset type)) msgs))))
      (testing "replies with success if referencing existing prev-log-entry"
         (let [
-            [before msgs] (timeout (initial-state 0))
+            before (initial-state 0)
             [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)]
             (is (some #(= true (last %)) msgs))))
      (testing "resets timer on successful append-entries"
         (let [
-            [before msgs] (timeout (initial-state 0))
+            before (initial-state 0)
             [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)]
             (is (some (fn [[target type args]] (= reset type)) msgs))))
      (testing "applies committed commands to fsm"
