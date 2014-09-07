@@ -77,21 +77,26 @@
 
   (defmulti request-vote state-of)
   (defmethod request-vote :default [state term candidate-id last-log-index last-log-term]
-    (if (< term (:current-term state))
+    (cond 
+      (< term (:current-term state))
       [state [(msg candidate-id voted (:current-term state) (:id state) false)]]
-      (if (> term (:current-term state))
-        (redispatch
-          (become-follower state term)
-          request-vote
-          term candidate-id last-log-index last-log-term)
-        (if (and
-         (has-vote state candidate-id)
-         (up-to-date state last-log-term last-log-index))
-          (let [
-            reply-msg (msg candidate-id voted (:current-term state) (:id state) true)
-            reset-msg (msg timer reset (:id state) (:election-delay config))]
-            [(vote state candidate-id) [reply-msg reset-msg]])
-          [state [(msg candidate-id voted (:current-term state) (:id state) false)]]))))
+      
+      (> term (:current-term state))
+      (redispatch
+        (become-follower state term)
+        request-vote
+        term candidate-id last-log-index last-log-term)
+      
+      (not (and
+       (has-vote state candidate-id)
+       (up-to-date state last-log-term last-log-index)))
+      [state [(msg candidate-id voted (:current-term state) (:id state) false)]]
+
+      :else
+      (let [
+          reply-msg (msg candidate-id voted (:current-term state) (:id state) true)
+          reset-msg (msg timer reset (:id state) (:election-delay config))]
+          [(vote state candidate-id) [reply-msg reset-msg]])))
 
   (defn become-candidate [state]
     (let [
@@ -119,41 +124,50 @@
   (defmethod timeout :leader [state] ; TODO: test
     [state (advertise-leader state)])
 
-  (defn update-or-append ([[x & xs :as orig][y & ys] acc]
-    (if (nil? y)
-      (concat acc orig)
-      (if (= x y)
+  (defn update-or-append 
+    ([orig newer] 
+      (update-or-append orig newer []))
+    ([[x & xs :as orig][y & ys] acc]
+      (cond 
+        (nil? y)
+        (concat acc orig)
+        
+        (= x y)
         (recur xs ys (conj acc x))
+        
+        :else
         (recur nil ys (conj acc y)))))
-  ([orig newer] (update-or-append orig newer [])))
 
   (defn update-log [log prev-log-index entries] 
     (let [
       prefix (subvec log 0 (inc prev-log-index))
       updating (subvec log (inc prev-log-index))
-      suffix (update-or-append updating entries)
-      ]
+      suffix (update-or-append updating entries)]
       (vec (concat prefix suffix))))
+
+  (def fsm-fn conj)
+
+  (defn apply-to-fsm [state, cmd] 
+    (let [
+      state (update-in state [:fsm] #(fsm-fn % cmd))
+      state (update-in state [:last-applied] inc)]
+      state))
 
   (defn append-log [state prev-log-index entries leader-commit] 
     (let [
-      state (update-in state [:log]  #(update-log % prev-log-index entries))
+      state (update-in state [:log] #(update-log % prev-log-index entries))
       commit-index (:commit-index state)
       [_, last-log-index] (last-log state)
       new-commit-index (max commit-index (min leader-commit last-log-index))
       state (assoc state :commit-index new-commit-index)
-      fsm-fn (fn [current cmd] (conj current cmd))
-      apply-to-fsm (fn [state, cmd] (update-in (update-in state [:fsm] #(fsm-fn % cmd)) [:last-applied] inc))]
-      (reduce 
-        apply-to-fsm state 
-        (map :cmd (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index))))))
+      newly-committed (map :cmd (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index)))]
+      (reduce apply-to-fsm state newly-committed)))
 
 
   (defn highest-majority [indexes fallback]
     (let [
       count-ge #(count (filter (partial <= %) indexes))
-      is-majority #(> % (/ (count members) 2))
-      ]
+      is-majority #(> % (/ (count members) 2))]
       (reduce max fallback (filter (comp is-majority count-ge) (set indexes)))))
 
   ; TODO simplify by handling match-index for self like everybody else ?
@@ -165,9 +179,10 @@
       is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
       (first (filter is-from-current-term uncommitted-replicated-indexes))))
 
-;TODO: check all redispatches after state change
+  ;TODO: check all redispatches after state change
   (declare update-msg)
   (declare executed)
+
   (defmulti appended state-of)
   (defmethod appended :default [state term appender next-index success]
     (cond
