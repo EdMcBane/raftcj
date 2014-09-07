@@ -38,9 +38,10 @@
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
       others (filter #(not (= (:id state) %)) (keys members))
-      next-index (into {} (map to-entry others))
-      next-match (into {} (map #(vector % 0) others))]
-      (assoc (assoc (assoc state :next-index next-index) :next-match next-match) :statename :leader)))
+      state (assoc state :next-index (into {} (map to-entry others)))
+      state (assoc state :next-match (into {} (map #(vector % 0) others)))
+      state (assoc state :statename :leader)]
+      state))
 
   (declare elected)
 
