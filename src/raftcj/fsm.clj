@@ -208,14 +208,15 @@
   (defev append-entries :follower [leader-id prev-log-index prev-log-term entries leader-commit]
     [(msg leader-id appended (:current-term state) (:id state) false)]
     (let [
-      local-prev-log (get (:log state) prev-log-index)]
-      (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log))))
+      local-prev-log (get (:log state) prev-log-index)
+      reset-msg (msg timer reset (:id state) (:election-delay config))]
+      (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log)))) ; TODO: test when prev-log-index is beyond end of log
         [state [
           (msg leader-id appended (:current-term state) (:id state) false)
-          (msg timer reset (:id state) (:election-delay config))]]
+          reset-msg]]
         [(append-log state prev-log-index entries leader-commit) [
           (msg leader-id appended (:current-term state) (:id state) true)
-          (msg timer reset (:id state)(:election-delay config))]])))
+          reset-msg]])))
 
   (defev append-entries :candidate [leader-id prev-log-index prev-log-term entries leader-commit]
     [(msg leader-id appended (:current-term state) (:id state) false)]
