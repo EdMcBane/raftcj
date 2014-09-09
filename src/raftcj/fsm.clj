@@ -2,9 +2,17 @@
   (:require clojure.string)
   (:require  [raftcj.core :refer :all]))
 
-(defn fsm [config]
-  (let [
-    members (:members config)]
+  ; TODO: make configuration configurable again
+  (def config {
+    :heartbeat-delay 1
+    :election-delay  3
+    :members {
+        0 "127.0.0.1"
+        12 "127.0.0.2"
+        23 "127.0.0.3"
+        34 "127.0.0.4"
+        45 "127.0.0.5"}})
+
   (defn msg [target type & args]
     (concat [target type] args))
   (declare executed)
@@ -36,7 +44,7 @@
     (let [
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
-      others (filter #(not (= (:id state) %)) (keys members))
+      others (filter #(not (= (:id state) %)) (keys (:members config)))
       state (assoc state :next-index (into {} (map to-entry others)))
       state (assoc state :next-match (into {} (map #(vector % 0) others)))
       state (assoc state :statename :leader)]
@@ -51,28 +59,31 @@
   
   ; TODO: macro to redispatch on newer term?
 
+  (defmacro defev [evname selector rest body] 
+    `(defmethod ~evname ~selector ~(vec (concat ['state 'term] rest))
+      (cond 
+        (> ~'term (:current-term ~'state))
+        (redispatch
+            (become-follower ~'state ~'term)
+            ~evname
+            ~'term ~@rest)
+        
+        (< ~'term (:current-term ~'state))
+        [~'state []]
+        
+        :else
+        ~body)))
+
   (defmulti voted state-of)
-  (defmethod voted :default [state term voter granted]
-    (cond 
-      (> term (:current-term state))
-      (redispatch
-          (become-follower state term)
-          voted
-          term voter granted)
-      
-      (< term (:current-term state))
+  (defev voted :default [voter granted]
+    (if (not granted)
       [state []]
-      
-      (not granted)
-      [state []]
-      
-      :else
       (let
         [state (update-in state [:votes] #(conj % voter))]
-        (if (majority members (:votes state))
+        (if (majority (:members config) (:votes state))
           (elected (become-leader state))
           [state []]))))
-
+  
   ; TODO: macro to reply false on old term?
 
   (defmulti request-vote state-of)
@@ -118,7 +129,7 @@
       reset-msg (msg timer reset (:id state) (:election-delay config))
       vote-reqs (map
          #(apply msg (concat [% request-vote] (map state [:current-term :id :last-log-index :last-log-term])))
-         (filter #(not (= (:id state) %)) (keys members)))]
+         (filter #(not (= (:id state) %)) (keys (:members config))))]
       [state, (concat [reset-msg] vote-reqs msgs)]))
 
   (defmethod timeout :leader [state] ; TODO: test
@@ -167,7 +178,7 @@
   (defn highest-majority [indexes fallback]
     (let [
       count-ge #(count (filter (partial <= %) indexes))
-      is-majority #(> % (/ (count members) 2))]
+      is-majority #(> % (/ (count (:members config)) 2))]
       (reduce max fallback (filter (comp is-majority count-ge) (set indexes)))))
 
   ; TODO simplify by handling match-index for self like everybody else ?
@@ -183,18 +194,8 @@
   (declare executed)
 
   (defmulti appended state-of)
-  (defmethod appended :default [state term appender next-index success]
-    (cond
-      (> term (:current-term state))
-      (redispatch
-          (become-follower state term)
-          appended
-          term appender next-index success)
-
-      (< term (:current-term state))
-      [state []]
-      
-      success
+  (defev appended :default [appender next-index success]
+    (if success
       (let [
           state (assoc-in (assoc-in state [:next-index appender] next-index) [:next-match appender] next-index)
           old-commit-index (:commit-index state)
@@ -206,8 +207,6 @@
           outstanding-reqs (filter (complement nil?) (map (partial get (:client-reqs state)) newly-committed))
           msgs (vec (map #(msg % executed true) outstanding-reqs))]
           [state msgs])
-
-      :else
       [(assoc-in state [:next-index appender] (dec next-index))
         (update-msg state appender (dec next-index))]))
 
@@ -258,7 +257,7 @@
       heartbeats (vec (map 
         (fn [[peer _]] (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) [] (:commit-index state)))
         (:next-index state)))
-      reset (msg timer reset (:id state) (:heartbeat-delay members))]
+      reset (msg timer reset (:id state) (:heartbeat-delay config))]
       (conj heartbeats reset)))
 
   (defn elected [state]
@@ -283,7 +282,6 @@
       needing-update (filter (fn [peer idx] (>= last-log-index idx)) (:next-index state))
       updates (vec (map (partial update-msg state) needing-update))]
       [state updates]))
-)) 
 ; TODO: RPC, not messages
 ; TODO: create part-of-cluster check logic outside ?
 

@@ -3,22 +3,9 @@
             [raftcj.core :refer :all]
             [raftcj.fsm :refer :all]))
 
-(def config {
-    :heartbeat-delay 1
-    :election-delay  3
-    :members {
-        0 "127.0.0.1"
-        12 "127.0.0.2"
-        23 "127.0.0.3"
-        34 "127.0.0.4"
-        45 "127.0.0.5"}})
-
-(fsm config)
-
 (def a-term 42)
 (def a-candidate-id 12)
 (def another-candidate-id 23)
-
 
 (deftest become-follower-test
     (testing ":statename is :follower on becoming follower"
@@ -359,18 +346,5 @@
             (is (= 1 (:last-applied after))))))
 
 ; TODO: what does it mean to "retry" in case of timeout?
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
