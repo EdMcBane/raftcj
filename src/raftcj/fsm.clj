@@ -59,7 +59,7 @@
   
   ; TODO: macro to redispatch on newer term?
 
-  (defmacro defev [evname selector rest body] 
+  (defmacro defev [evname selector rest failmsgs body] 
     `(defmethod ~evname ~selector ~(vec (concat ['state 'term] rest))
       (cond 
         (> ~'term (:current-term ~'state))
@@ -69,13 +69,14 @@
             ~'term ~@rest)
         
         (< ~'term (:current-term ~'state))
-        [~'state []]
+        [~'state ~failmsgs]
         
         :else
         ~body)))
 
   (defmulti voted state-of)
   (defev voted :default [voter granted]
+    []
     (if (not granted)
       [state []]
       (let
@@ -87,17 +88,9 @@
   ; TODO: macro to reply false on old term?
 
   (defmulti request-vote state-of)
-  (defmethod request-vote :default [state term candidate-id last-log-index last-log-term]
+  (defev request-vote :default [candidate-id last-log-index last-log-term]
+    [(msg candidate-id voted (:current-term state) (:id state) false)]
     (cond 
-      (< term (:current-term state))
-      [state [(msg candidate-id voted (:current-term state) (:id state) false)]]
-      
-      (> term (:current-term state))
-      (redispatch
-        (become-follower state term)
-        request-vote
-        term candidate-id last-log-index last-log-term)
-      
       (not (and
        (has-vote state candidate-id)
        (up-to-date state last-log-term last-log-index)))
@@ -195,6 +188,7 @@
 
   (defmulti appended state-of)
   (defev appended :default [appender next-index success]
+    []
     (if success
       (let [
           state (assoc-in (assoc-in state [:next-index appender] next-index) [:next-match appender] next-index)
@@ -211,44 +205,24 @@
         (update-msg state appender (dec next-index))]))
 
   (defmulti append-entries state-of)
-  (defmethod append-entries :follower [state term leader-id prev-log-index prev-log-term entries leader-commit]
-    (cond 
-      (> term (:current-term state))
-      (redispatch
-        (become-follower state term)
-        append-entries
-        term leader-id prev-log-index prev-log-term entries leader-commit)
-      
-      (< term (:current-term state))
-      [state [(msg leader-id appended (:current-term state) (:id state) false)]]
-      
-      :else
-      (let [
-        local-prev-log (get (:log state) prev-log-index)]
-        (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log))))
-          [state [
-            (msg leader-id appended (:current-term state) (:id state) false)
-            (msg timer reset (:id state) (:election-delay config))]]
-          [(append-log state prev-log-index entries leader-commit) [
-            (msg leader-id appended (:current-term state) (:id state) true)
-            (msg timer reset (:id state)(:election-delay config))]]))))
+  (defev append-entries :follower [leader-id prev-log-index prev-log-term entries leader-commit]
+    [(msg leader-id appended (:current-term state) (:id state) false)]
+    (let [
+      local-prev-log (get (:log state) prev-log-index)]
+      (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log))))
+        [state [
+          (msg leader-id appended (:current-term state) (:id state) false)
+          (msg timer reset (:id state) (:election-delay config))]]
+        [(append-log state prev-log-index entries leader-commit) [
+          (msg leader-id appended (:current-term state) (:id state) true)
+          (msg timer reset (:id state)(:election-delay config))]])))
 
-  (defmethod append-entries :candidate [state term leader-id prev-log-index prev-log-term entries leader-commit]
-    (cond 
-      (> term (:current-term state))
-      (redispatch
+  (defev append-entries :candidate [leader-id prev-log-index prev-log-term entries leader-commit]
+    [(msg leader-id appended (:current-term state) (:id state) false)]
+    (redispatch
         (become-follower state term)
         append-entries
-        term leader-id prev-log-index prev-log-term entries leader-commit)
-
-      (< term (:current-term state))
-      [state [(msg leader-id appended (:current-term state) (:id state) false)]]
-      
-      :else
-      (redispatch
-        (become-follower state term)
-        append-entries
-        term leader-id prev-log-index prev-log-term entries leader-commit)))
+        term leader-id prev-log-index prev-log-term entries leader-commit))
 
 
   (defn advertise-leader [state]
