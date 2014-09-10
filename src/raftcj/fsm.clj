@@ -2,17 +2,6 @@
   (:require clojure.string)
   (:require  [raftcj.core :refer :all]))
 
-  ; TODO: make configuration configurable again
-  (def config {
-    :heartbeat-delay 1
-    :election-delay  3
-    :members {
-        0 "127.0.0.1"
-        12 "127.0.0.2"
-        23 "127.0.0.3"
-        34 "127.0.0.4"
-        45 "127.0.0.5"}})
-
   (defn msg [target type & args]
     (concat [target type] args))
 
@@ -26,7 +15,7 @@
         (assoc :voted-for nil)
         (assoc :statename :follower)
         (dissoc :client-reqs))
-      reset-msg (msg timer reset (:id state) (:election-delay config))
+      reset-msg (msg timer reset (:id state) (get-in state [:config :election-delay]))
       reply-msgs  (vec (map (fn [[idx client]] (msg client executed false)) outstanding-reqs))]
       [state (vec (conj reply-msgs reset-msg))]))
 
@@ -44,7 +33,7 @@
     (let [
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
-      others (filter #(not (= (:id state) %)) (keys (:members config)))]
+      others (filter #(not (= (:id state) %)) (keys (get-in state [:config :members])))]
       (-> state 
         (assoc :next-index (into {} (map to-entry others)))
         (assoc :next-match (into {} (map #(vector % 0) others)))
@@ -81,7 +70,7 @@
       [state []]
       (let
         [state (update-in state [:votes] #(conj % voter))]
-        (if (majority (:members config) (:votes state))
+        (if (majority (get-in state [:config :members]) (:votes state))
           (elected (become-leader state))
           [state []]))))
   
@@ -99,7 +88,7 @@
       :else
       (let [
           reply-msg (msg candidate-id voted (:current-term state) (:id state) true)
-          reset-msg (msg timer reset (:id state) (:election-delay config))]
+          reset-msg (msg timer reset (:id state) (get-in state [:config :election-delay]))]
           [(vote state candidate-id) [reply-msg reset-msg]])))
 
   (defn become-candidate [state]
@@ -119,10 +108,10 @@
         (update-in [:current-term] inc)
         (vote (:id state)))
       [state msgs] (voted state (:current-term state) (:id state) true)
-      reset-msg (msg timer reset (:id state) (:election-delay config))
+      reset-msg (msg timer reset (:id state) (get-in state [:config :election-delay]))
       vote-reqs (map
          #(apply msg (concat [% request-vote] (map state [:current-term :id :last-log-index :last-log-term])))
-         (filter #(not (= (:id state) %)) (keys (:members config))))]
+         (filter #(not (= (:id state) %)) (keys (get-in state [:config :members]))))]
       [state, (concat [reset-msg] vote-reqs msgs)]))
 
   (defmethod timeout :leader [state] ; TODO: test
@@ -166,17 +155,17 @@
       (reduce apply-to-fsm state newly-committed)))
 
 
-  (defn highest-majority [indexes fallback]
+  (defn highest-majority [members indexes fallback]
     (let [
       count-ge #(count (filter (partial <= %) indexes))
-      is-majority #(> % (/ (count (:members config)) 2))]
+      is-majority #(> % (/ (count members) 2))]
       (reduce max fallback (filter (comp is-majority count-ge) (set indexes)))))
 
   ; TODO simplify by handling match-index for self like everybody else ?
-  (defn new-commit-index [current-term log indexes commit-index]
+  (defn new-commit-index [members current-term log indexes commit-index]
     (let [
       local-match-index (dec (count log))
-      highest-uncommited-majority (highest-majority (conj indexes local-match-index) commit-index)
+      highest-uncommited-majority (highest-majority members (conj indexes local-match-index) commit-index)
       uncommitted-replicated-indexes (range highest-uncommited-majority commit-index -1)
       is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
       (first (filter is-from-current-term uncommitted-replicated-indexes))))
@@ -192,7 +181,7 @@
           state (assoc-in (assoc-in state [:next-index appender] next-index) [:next-match appender] next-index)
           old-commit-index (:commit-index state)
           commit-index (if-let 
-            [updated (new-commit-index (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
+            [updated (new-commit-index (get-in state [:config :members]) (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
           updated old-commit-index)
           state (assoc state :commit-index commit-index)
           newly-committed (range commit-index old-commit-index -1)
@@ -207,7 +196,7 @@
     [(msg leader-id appended (:current-term state) (:id state) false)]
     (let [
       local-prev-log (get (:log state) prev-log-index)
-      reset-msg (msg timer reset (:id state) (:election-delay config))]
+      reset-msg (msg timer reset (:id state) (get-in state [:config :election-delay]))]
       (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log)))) ; TODO: test when prev-log-index is beyond end of log
         [state [
           (msg leader-id appended (:current-term state) (:id state) false)
@@ -233,7 +222,7 @@
   (defn advertise-leader [state] ;TODO: test
     (let [
       heartbeats (vec (map #(apply (partial update-msg state) %)(:next-index state)))
-      reset (msg timer reset (:id state) (:heartbeat-delay config))]
+      reset (msg timer reset (:id state) (get-in state [:config :heartbeat-delay]))]
       (conj heartbeats reset)))
 
   (defn elected [state]
