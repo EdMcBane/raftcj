@@ -103,10 +103,9 @@
           [(vote state candidate-id) [reply-msg reset-msg]])))
 
   (defn become-candidate [state]
-    (let [
-      state (assoc state :statename :candidate) 
-      state (assoc state :votes #{})]
-      [state []]))
+    [(-> state 
+      (assoc :statename :candidate) 
+      (assoc :votes #{})) []])
 
   (defmulti timeout state-of)
   (defmethod timeout :follower [state]
@@ -116,8 +115,9 @@
 
   (defmethod timeout :candidate [state]
     (let [
-      state (update-in state [:current-term] inc)
-      state (vote state (:id state))
+      state (-> state 
+        (update-in [:current-term] inc)
+        (vote (:id state)))
       [state msgs] (voted state (:current-term state) (:id state) true)
       reset-msg (msg timer reset (:id state) (:election-delay config))
       vote-reqs (map
@@ -135,10 +135,8 @@
       (cond 
         (nil? y)
         (concat acc orig)
-        
         (= x y)
         (recur xs ys (conj acc x))
-        
         :else
         (recur nil ys (conj acc y)))))
 
