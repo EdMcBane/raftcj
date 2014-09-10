@@ -225,25 +225,21 @@
         append-entries
         term leader-id prev-log-index prev-log-term entries leader-commit))
 
-
-  (defn advertise-leader [state]
-    (let [
-      [prev-log-entry prev-log-index] (last-log state)
-      heartbeats (vec (map 
-        (fn [[peer _]] (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) [] (:commit-index state)))
-        (:next-index state)))
-      reset (msg timer reset (:id state) (:heartbeat-delay config))]
-      (conj heartbeats reset)))
-
-  (defn elected [state]
-    [state (advertise-leader state)])
-
   (defn update-msg [state peer idx]
     (let [
       prev-log-index (dec idx)
       prev-log-entry (get (:log state) prev-log-index)
       entries (subvec (:log state) idx)]
       (msg peer append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) entries (:commit-index state))))
+
+  (defn advertise-leader [state] ;TODO: test
+    (let [
+      heartbeats (vec (map #(apply (partial update-msg state) %)(:next-index state)))
+      reset (msg timer reset (:id state) (:heartbeat-delay config))]
+      (conj heartbeats reset)))
+
+  (defn elected [state]
+    [state (advertise-leader state)])
 
   (defn executed [client success] 
     :todo)
@@ -255,7 +251,7 @@
       [_ last-log-index] (last-log state)
       state (update-in state [:client-reqs last-log-index] client)
       needing-update (filter (fn [peer idx] (>= last-log-index idx)) (:next-index state))
-      updates (vec (map (partial update-msg state) needing-update))]
+      updates (vec (map #(apply (partial update-msg state) %) needing-update))] ; TODO: test
       [state updates]))
 ; TODO: RPC, not messages
 ; TODO: create part-of-cluster check logic outside ?
