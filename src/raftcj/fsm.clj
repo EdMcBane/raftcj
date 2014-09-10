@@ -15,40 +15,40 @@
 
   (defn msg [target type & args]
     (concat [target type] args))
+
   (declare executed)
 
   (defn become-follower [state term]
     (let [
       outstanding-reqs (:client-reqs state)
-      state (assoc state :current-term term)
-      state (assoc state :voted-for nil)
-      state (assoc state :statename :follower)
-      state (dissoc state :client-reqs)
+      state (-> state 
+        (assoc :current-term term)
+        (assoc :voted-for nil)
+        (assoc :statename :follower)
+        (dissoc :client-reqs))
       reset-msg (msg timer reset (:id state) (:election-delay config))
       reply-msgs  (vec (map (fn [[idx client]] (msg client executed false)) outstanding-reqs))]
       [state (vec (conj reply-msgs reset-msg))]))
 
   (defn majority [cluster votes]
-    (do 
-      (assert (every? #(contains? cluster %) votes))
-      (> (count votes) (/ (count cluster) 2))))
+    (assert (every? #(contains? cluster %) votes))
+    (> (count votes) (/ (count cluster) 2)))
 
   (defn vote [state candidate]
     (let [
       vote (:voted-for state)]
-      (do
-        (assert (or (nil? vote) (= candidate vote)))
-        (assoc state :voted-for candidate))))
+      (assert (or (nil? vote) (= candidate vote)))
+      (assoc state :voted-for candidate)))
 
   (defn become-leader [state] ; TODO: change interface to return [state, []]
     (let [
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
-      others (filter #(not (= (:id state) %)) (keys (:members config)))
-      state (assoc state :next-index (into {} (map to-entry others)))
-      state (assoc state :next-match (into {} (map #(vector % 0) others)))
-      state (assoc state :statename :leader)]
-      state))
+      others (filter #(not (= (:id state) %)) (keys (:members config)))]
+      (-> state 
+        (assoc :next-index (into {} (map to-entry others)))
+        (assoc :next-match (into {} (map #(vector % 0) others)))
+        (assoc :statename :leader))))
 
   (declare elected advertise-leader)
 
