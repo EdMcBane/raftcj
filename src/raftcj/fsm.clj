@@ -44,7 +44,8 @@
     (let [
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
-      others (filter #(not (= (:id state) %)) (keys (get-in state [:config :members])))]
+      members (keys (get-in state [:config :members]))
+      others (filter #(not (= (:id state) %)) members)]
       (-> state 
         (assoc :next-index (into {} (map to-entry others)))
         (assoc :next-match (into {} (map #(vector % 0) others)))
@@ -74,31 +75,30 @@
     []
     (if (not granted)
       [state []]
-      (let
-        [state (update-in state [:votes] #(conj % voter))]
-        (if (majority (get-in state [:config :members]) (:votes state))
+      (let [
+        state (update-in state [:votes] #(conj % voter))
+        members (get-in state [:config :members])]
+        (if (majority members (:votes state))
           (elected (become-leader state))
           [state []]))))
   
   (defmulti request-vote state-of)
   (defev request-vote :default [candidate-id last-log-index last-log-term]
     [(msg candidate-id 'voted (:current-term state) (:id state) false)]
-    (cond 
-      (not (and
+    (if (not (and
        (has-vote state candidate-id)
        (up-to-date state last-log-term last-log-index)))
       [state [(msg candidate-id 'voted (:current-term state) (:id state) false)]]
 
-      :else
       (let [
           reply-msg (msg candidate-id 'voted (:current-term state) (:id state) true)
           reset-msg (msg :timer 'reset (election-delay state))]
           [(vote state candidate-id) [reply-msg reset-msg]])))
 
   (defn become-candidate [state]
-    [(-> state 
+    [(-> state
       (assoc :statename :candidate)
-      (assoc :voted-for nil) 
+      (assoc :voted-for nil)
       (assoc :votes #{})) []])
 
   (defmulti timeout state-of)
@@ -246,5 +246,4 @@
       updates (map #(apply (partial update-msg state) %) needing-update)] ; TODO: test
       [state updates]))
 
-; TODO: RPC, not messages
 ; TODO: create part-of-cluster check logic outside ?

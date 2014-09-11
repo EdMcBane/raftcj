@@ -2,13 +2,13 @@
   (:require clojure.string))
 
 (defn initial-state [id config] {
-                        :statename :follower 
-                        :id id
-                        :current-term 0 :voted-for nil :log [{:term 0}]
-                        :commit-index 0 :last-applied 0
-                        :votes #{}
-                        :config config
-                        })
+  :statename :follower 
+  :id id
+  :current-term 0 :voted-for nil :log [{:term 0}]
+  :commit-index 0 :last-applied 0
+  :votes #{}
+  :config config
+  })
 
 (defn has-vote [state candidate-id]
   (or
