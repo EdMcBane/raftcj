@@ -163,7 +163,6 @@
 
   (defn highest-majority [members indexes fallback]
     (let [
-      _ (println "maj" (count members) indexes)
       count-ge #(count (filter (partial <= %) indexes))
       is-majority #(> % (/ (count members) 2))]
       (reduce max fallback (filter (comp is-majority count-ge) (set indexes)))))
