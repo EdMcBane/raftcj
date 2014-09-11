@@ -185,7 +185,7 @@
       (let [
           state (-> state 
             (assoc-in [:next-index appender] next-index)
-            (assoc-in [:next-match appender] next-index))
+            (assoc-in [:next-match appender] (dec next-index)))
           old-commit-index (:commit-index state)
           commit-index (if-let 
             [updated (new-commit-index (get-in state [:config :members]) (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
