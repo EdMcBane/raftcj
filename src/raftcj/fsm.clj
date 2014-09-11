@@ -92,7 +92,8 @@
 
   (defn become-candidate [state]
     [(-> state 
-      (assoc :statename :candidate) 
+      (assoc :statename :candidate)
+      (assoc :voted-for nil) 
       (assoc :votes #{})) []])
 
   (defmulti timeout state-of)
