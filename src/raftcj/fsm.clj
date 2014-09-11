@@ -26,7 +26,7 @@
         (assoc :voted-for nil)
         (assoc :statename :follower)
         (dissoc :client-reqs))
-      reset-msg (msg :timer 'reset (:id state) (election-delay state))
+      reset-msg (msg :timer 'reset (election-delay state))
       reply-msgs  (vec (map (fn [[idx client]] (msg client 'executed false)) outstanding-reqs))]
       [state (vec (conj reply-msgs reset-msg))]))
 
@@ -51,7 +51,7 @@
         (assoc :statename :leader))))
 
   (defn init [state]
-    [state [(msg :timer 'reset (:id state) (election-delay state))]])
+    [state [(msg :timer 'reset (election-delay state))]])
   
   (defmacro defev [evname selector rest failmsgs body] 
     `(defmethod ~evname ~selector ~(vec (concat ['state 'term] rest))
@@ -92,7 +92,7 @@
       :else
       (let [
           reply-msg (msg candidate-id 'voted (:current-term state) (:id state) true)
-          reset-msg (msg :timer 'reset (:id state) (election-delay state))]
+          reset-msg (msg :timer 'reset (election-delay state))]
           [(vote state candidate-id) [reply-msg reset-msg]])))
 
   (defn become-candidate [state]
@@ -113,7 +113,7 @@
         (update-in [:current-term] inc)
         (vote (:id state)))
       [state msgs] (voted state (:current-term state) (:id state) true)
-      reset-msg (msg :timer 'reset (:id state) (election-delay state))
+      reset-msg (msg :timer 'reset (election-delay state))
       [last-log-entry last-log-index] (last-log state)
       vote-reqs (map
          #(apply msg (concat [% 'request-vote] [(:current-term state) (:id state) last-log-index (:term last-log-entry)]))
@@ -209,17 +209,17 @@
     [(msg leader-id 'appended (:current-term state) (:id state) (inc prev-log-index) false)]
     (let [
       local-prev-log (get (:log state) prev-log-index)
-      reset-msg (msg :timer 'reset (:id state) (election-delay state))]
+      reset-msg (msg :timer 'reset (election-delay state))]
       (if (or (nil? local-prev-log) (not (= prev-log-term (:term local-prev-log)))) ; TODO: test when prev-log-index is beyond end of log
         [state [
           (msg leader-id 'appended (:current-term state) (:id state) (inc prev-log-index) false)
           reset-msg]]
         [(append-log state prev-log-index entries leader-commit) [
-          (msg leader-id 'appended (:current-term state) (:id state) (inc prev-log-index) true)
+          (msg leader-id 'appended (:current-term state) (:id state) (inc (+ (count entries) prev-log-index)) true)
           reset-msg]])))
 
   (defev append-entries :candidate [leader-id prev-log-index prev-log-term entries leader-commit]
-    [(msg leader-id 'appended (:current-term state) (:id state) (inc (+ (count entries) prev-log-index)) false)]
+    [(msg leader-id 'appended (:current-term state) (:id state) (int prev-log-index) false)]
     (redispatch
         (become-follower state term)
         append-entries
@@ -228,7 +228,7 @@
   (defn advertise-leader [state] ;TODO: test
     (let [
       heartbeats (vec (map #(apply (partial update-msg state) %)(:next-index state)))
-      reset (msg :timer 'reset (:id state) (get-in state [:config :heartbeat-delay]))]
+      reset (msg :timer 'reset (get-in state [:config :heartbeat-delay]))]
       (conj heartbeats reset)))
 
   (defn elected [state]
@@ -239,8 +239,10 @@
     (let [
       state (update-in state [:log] #(conj % {:term (:current-term state) :cmd cmd}))
       [_ last-log-index] (last-log state)
-      state (update-in state [:client-reqs last-log-index] client)
-      needing-update (filter (fn [peer idx] (>= last-log-index idx)) (:next-index state))
+      state (assoc-in state [:client-reqs last-log-index] client)
+      _ (println (:next-index state))
+      needing-update (filter (fn [[peer idx]] (>= last-log-index idx)) (:next-index state))
+      _ (println "upd" needing-update)
       updates (vec (map #(apply (partial update-msg state) %) needing-update))] ; TODO: test
       [state updates]))
 
