@@ -188,6 +188,7 @@
     (testing "candidate becomes leader on majority"
         (let [
             [state, msgs] (timeout (initial-state 0 config))
+            [state, [msg]] (voted state 1 0 true)
             [state, [msg]] (voted state 1 12 true)
             [state, [msg]] (voted state 1 23 true)]
             (is (= :leader (:statename state))))

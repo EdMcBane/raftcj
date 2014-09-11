@@ -109,16 +109,14 @@
 
   (defmethod timeout :candidate [state]
     (let [
-      state (-> state 
-        (update-in [:current-term] inc)
-        (vote (:id state)))
-      [state msgs] (voted state (:current-term state) (:id state) true)
+      state (update-in state [:current-term] inc)
       reset-msg (msg :timer 'reset (election-delay state))
       [last-log-entry last-log-index] (last-log state)
+      members (keys (get-in state [:config :members]))
       vote-reqs (map
-         #(apply msg (concat [% 'request-vote] [(:current-term state) (:id state) last-log-index (:term last-log-entry)]))
-         (filter #(not (= (:id state) %)) (keys (get-in state [:config :members]))))]
-      [state, (concat [reset-msg] vote-reqs msgs)]))
+         #(msg % 'request-vote (:current-term state) (:id state) last-log-index (:term last-log-entry))
+         members)]
+      [state, (cons reset-msg vote-reqs)]))
 
   (defmethod timeout :leader [state] ; TODO: test
     [state (advertise-leader state)])
