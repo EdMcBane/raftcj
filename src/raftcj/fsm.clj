@@ -180,7 +180,10 @@
       prev-log-index (dec idx)
       prev-log-entry (get (:log state) prev-log-index)
       entries (subvec (:log state) idx)]
-      (msg peer 'append-entries (:current-term state) (:id state) prev-log-index (:term prev-log-entry) entries (:commit-index state))))
+      (msg peer 'append-entries 
+        (:current-term state) (:id state) 
+        prev-log-index (:term prev-log-entry) 
+        entries (:commit-index state))))
 
   (defmulti appended state-of)
   (defev appended :default [appender next-index success]
