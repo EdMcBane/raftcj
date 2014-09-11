@@ -109,8 +109,9 @@
         (vote (:id state)))
       [state msgs] (voted state (:current-term state) (:id state) true)
       reset-msg (msg timer reset (:id state) (get-in state [:config :election-delay]))
+      [last-log-entry last-log-index] (last-log state)
       vote-reqs (map
-         #(apply msg (concat [% request-vote] (map state [:current-term :id :last-log-index :last-log-term])))
+         #(apply msg (concat [% request-vote] [(:current-term state) (:id state) last-log-index (:term last-log-entry)]))
          (filter #(not (= (:id state) %)) (keys (get-in state [:config :members]))))]
       [state, (concat [reset-msg] vote-reqs msgs)]))
 
