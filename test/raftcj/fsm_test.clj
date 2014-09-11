@@ -108,7 +108,7 @@
             before (assoc (initial-state 0 config) :current-term 42)
             [after msgs] (request-vote before 42 a-candidate-id 0 0)
             [reply [target type args]] msgs]
-                (is (= reset type))))
+                (is (= 'reset type))))
     (testing "denies vote if already voted"
         (let [
             before (assoc (initial-state 0 config) :current-term 42)
@@ -131,7 +131,7 @@
         (let [
             [before, msgs] (timeout (initial-state 0 config))
             [after msgs] (request-vote before 43 a-candidate-id 0 0)]
-            (is (some (fn [[target type & args]] (and (= voted type) (true? (last args)))) msgs))))
+            (is (some (fn [[target type & args]] (and (= 'voted type) (true? (last args)))) msgs))))
      (testing "denies vote otherwise"
         (let [
             [before, msgs] (timeout (initial-state 0 config))
@@ -333,7 +333,7 @@
         (let [
             before (initial-state 0 config)
             [after, msgs] (append-entries before 1 a-candidate-id 1 1 [] 0)]
-            (is (some (fn [[target type args]] (= reset type)) msgs))))
+            (is (some (fn [[target type args]] (= 'reset type)) msgs))))
      (testing "replies with success if referencing existing prev-log-entry"
         (let [
             before (initial-state 0 config)
@@ -343,7 +343,7 @@
         (let [
             before (initial-state 0 config)
             [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)]
-            (is (some (fn [[target type args]] (= reset type)) msgs))))
+            (is (some (fn [[target type args]] (= 'reset type)) msgs))))
      (testing "applies committed commands to fsm"
         (let [
             before (initial-state 0 config)

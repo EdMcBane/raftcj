@@ -29,6 +29,3 @@
      (and (= term last-log-term) (>= index last-log-index) ))))
 
 (defn state-of [state & _] (:statename state))
-
-(def timer :todo)
-(defn reset [candidate-id delay] :todo)
