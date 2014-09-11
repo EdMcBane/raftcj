@@ -11,11 +11,11 @@
     :heartbeat-delay 1
     :election-delay  3
     :members {
-        0 "127.0.0.1"
-        12 "127.0.0.2"
-        23 "127.0.0.3"
-        34 "127.0.0.4"
-        45 "127.0.0.5"}})
+        0  ["127.0.0.1" 10000]
+        12 ["127.0.0.2" 10012]
+        23 ["127.0.0.3" 10023]
+        34 ["127.0.0.4" 10034]
+        45 ["127.0.0.5" 10045]}})
 
 (deftest become-follower-test
     (testing ":statename is :follower on becoming follower"

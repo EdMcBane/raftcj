@@ -1,7 +1,7 @@
 (ns raftcj.fsm
   (:require clojure.string)
   (:require  [raftcj.core :refer :all]))
-
+  
   (defn msg [target type & args]
     (concat [target type] args))
 
@@ -45,9 +45,8 @@
         (assoc :next-match (into {} (map #(vector % 0) others)))
         (assoc :statename :leader))))
 
-  (declare elected advertise-leader)
-
-  
+  (defn init [state]
+    [state [(msg timer reset (:id state) (get-in state [:config :election-delay]))]])
   
   (defmacro defev [evname selector rest failmsgs body] 
     `(defmethod ~evname ~selector ~(vec (concat ['state 'term] rest))
@@ -64,6 +63,7 @@
         :else
         ~body)))
 
+  (declare elected advertise-leader)
   (defmulti voted state-of)
   (defev voted :default [voter granted]
     []
