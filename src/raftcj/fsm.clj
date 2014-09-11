@@ -27,8 +27,8 @@
         (assoc :statename :follower)
         (dissoc :client-reqs))
       reset-msg (msg :timer 'reset (election-delay state))
-      reply-msgs  (vec (map (fn [[idx client]] (msg client 'executed false)) outstanding-reqs))]
-      [state (vec (conj reply-msgs reset-msg))]))
+      reply-msgs  (map (fn [[idx client]] (msg client 'executed false)) outstanding-reqs)]
+      [state (conj reply-msgs reset-msg)]))
 
   (defn majority [cluster votes]
     (assert (every? #(contains? cluster %) votes))
@@ -199,7 +199,7 @@
           state (assoc state :commit-index commit-index)
           newly-committed (range commit-index old-commit-index -1)
           outstanding-reqs (filter (complement nil?) (map (partial get (:client-reqs state)) newly-committed))
-          msgs (vec (map #(msg % 'executed true) outstanding-reqs))]
+          msgs (map #(msg % 'executed true) outstanding-reqs)]
           [state msgs])
       [(assoc-in state [:next-index appender] (dec next-index))
         (update-msg state appender (dec next-index))]))
@@ -227,7 +227,7 @@
 
   (defn advertise-leader [state] ;TODO: test
     (let [
-      heartbeats (vec (map #(apply (partial update-msg state) %)(:next-index state)))
+      heartbeats (map #(apply (partial update-msg state) %)(:next-index state))
       reset (msg :timer 'reset (get-in state [:config :heartbeat-delay]))]
       (conj heartbeats reset)))
 
@@ -243,7 +243,7 @@
       _ (println (:next-index state))
       needing-update (filter (fn [[peer idx]] (>= last-log-index idx)) (:next-index state))
       _ (println "upd" needing-update)
-      updates (vec (map #(apply (partial update-msg state) %) needing-update))] ; TODO: test
+      updates (map #(apply (partial update-msg state) %) needing-update)] ; TODO: test
       [state updates]))
 
 ; TODO: RPC, not messages

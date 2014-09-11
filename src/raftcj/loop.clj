@@ -6,41 +6,32 @@
   [raftcj.core :refer :all]
   [raftcj.fsm :refer :all]))
 
-(def next-timeout (atom nil))
+(defn now [] (System/currentTimeMillis))
+
+(def alarm-time (atom nil))
+
 (defn clear-timer []
-  (swap! next-timeout (constantly nil)))
+  (swap! alarm-time (constantly nil)))
+
 (defn reset [delay] 
-  (swap! next-timeout (constantly (+ delay (System/currentTimeMillis)))))
+  (swap! alarm-time (constantly (+ delay (now)))))
 
-(defn calc-offset []
-    (if (nil? (deref next-timeout))
+(defn calc-timeout []
+    (if (nil? @alarm-time) 
         nil
-        (let [
-            now (System/currentTimeMillis)]
-            (- (deref next-timeout) now))))
+        (- @alarm-time (now))))
 
-
-        
 (defn recv-event [id selector] 
     (let [
-        delay (calc-offset)]
-        (cond
-            (nil? delay)
+        timeout (calc-timeout)]
+        (if (or (nil? timeout) (> timeout 0))
             (let 
-                [data (recv-data selector 0)] ;TODO: duplication, see below
+                [data (recv-data selector (or timeout 0))]
                 (if (nil? data)
                     (recur id selector)
-                    (cons id (edn/read-string data)) ))
+                    (cons id (edn/read-string data))))
 
-            (<= delay 0)
-            (do (clear-timer) (msg id 'timeout))
-            
-            :else
-            (let 
-                [data (recv-data selector delay)]
-                (if (nil? data)
-                    (recur id selector)
-                    (cons id (edn/read-string data)))))))
+            (do (clear-timer) (msg id 'timeout)))))
 
 (defn send-event [selector dest event] 
     (send-data selector dest (pr-str event)))
@@ -50,13 +41,12 @@
 
 (defn eventloop [dispatchfn state events]
     (let [
-        event (first events)
-        otherevents (rest events)]
+        event (first events)]
         (if (nil? event)
             :exit
             (let [
                 [state newevents] (dispatchfn state event)]
-                (recur dispatchfn state (concat newevents otherevents))))))
+                (recur dispatchfn state (concat newevents (rest events)))))))
 
 (defn dispatch [config selector state [target evname & args]]
     (println "dispatching event" target evname args)
@@ -86,7 +76,6 @@
 (defn run [config id]
     (let [
         state (initial-state id config)
-        _ (clojure.pprint/pprint state)
         [ip port] (get-in config [:members id])
         addr (make-address ip port)
         chan (make-chan addr)
@@ -96,16 +85,14 @@
         dispatchfn (partial dispatch config selector)]
             (eventloop dispatchfn state eventsrc)))
 
-
-(def config {
-    :heartbeat-delay 1000
-    :election-delay  2000
-    :members {
-        0  ["127.0.0.1" 10000]
-        12 ["127.0.0.1" 10012]
-        23 ["127.0.0.1" 10023]
-        34 ["127.0.0.1" 10034]
-        45 ["127.0.0.1" 10045]}})
-
 (defn -main [id]
-    (run config (read-string id)))
+    (run {
+        :heartbeat-delay 1000
+        :election-delay  2000
+        :members {
+            0  ["127.0.0.1" 10000]
+            12 ["127.0.0.1" 10012]
+            23 ["127.0.0.1" 10023]
+            34 ["127.0.0.1" 10034]
+            45 ["127.0.0.1" 10045]}}
+        (read-string id)))
