@@ -1,17 +1,14 @@
 (ns raftcj.fsm
-  (:require clojure.string)
-  (:require [raftcj.base :refer :all]))
+  (:require 
+    clojure.string 
+    [raftcj.base :refer [msg has-vote last-log up-to-date state-of]]
+    #+clj [raftcj.macros :refer [defev]])
+    #+cljs (:require-macros [raftcj.macros :refer [defev]]))
   
-  (defn msg [target type & args]
-    (concat [target type] args))
-
   (defn redispatch [[state, msgs] event & args]
     (let [
       [state, moremsgs] (apply (partial event state) args)]
       [state (concat msgs moremsgs)]))
-
-  (defn executed [client success] 
-    :todo)
 
   (defn election-delay [state]
     (let [
@@ -53,21 +50,6 @@
 
   (defn init [state]
     [state [(msg :timer 'reset (election-delay state))]])
-  
-  (defmacro defev [evname selector rest failmsgs body] 
-    `(defmethod ~evname ~selector ~(vec (concat ['state 'term] rest))
-      (cond 
-        (> ~'term (:current-term ~'state))
-        (redispatch
-            (become-follower ~'state ~'term)
-            ~evname
-            ~'term ~@rest)
-        
-        (< ~'term (:current-term ~'state))
-        [~'state ~failmsgs]
-        
-        :else
-        ~body)))
 
   (declare elected advertise-leader)
   (defmulti voted state-of)

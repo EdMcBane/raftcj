@@ -28,4 +28,7 @@
      (> term last-log-term)
      (and (= term last-log-term) (>= index last-log-index) ))))
 
-(defn state-of [state & _] (:statename state))
+(defn state-of [state & _] (:statename state)) ;TODO: variable arity
+
+(defn msg [target type & args]
+    (concat [target type] args))

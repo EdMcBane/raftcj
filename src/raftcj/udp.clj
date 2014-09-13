@@ -5,10 +5,12 @@
     (java.nio CharBuffer ByteBuffer)
     (java.nio.charset Charset)))
 
-(defn make-chan [addr] 
-  (println "binding to" addr)
+(defn make-address [[ip port]] (new InetSocketAddress ip port))
+
+(defn make-chan [ip-port] 
+  (println "binding to" ip-port)
   (-> (java.nio.channels.DatagramChannel/open) 
-    (.bind addr)
+    (.bind (make-address ip-port))
     (.configureBlocking false)))
 
 (defn make-selector [chan]
@@ -17,14 +19,15 @@
     (.register chan selector (SelectionKey/OP_READ))
     selector))
 
-(defn make-address [ip port] (new InetSocketAddress ip port))
+(defn make-socket [addr] (make-selector (make-chan addr)))
     
 (defn send-data [selector dest data]
   (let [
+    addr (make-address dest)
     chan (.channel (first (.keys selector)))
     charset (Charset/defaultCharset)
     buffer (.encode charset (CharBuffer/wrap data))]
-  (.send chan buffer dest)))
+  (.send chan buffer addr)))
 
 (defn recv-data [selector timeout]
   (let [
