@@ -3,7 +3,7 @@
   [clojure.edn :as edn]
   [clojure.pprint]
   [raftcj.udp :refer :all]
-  [raftcj.core :refer :all]
+  [raftcj.base :refer :all]
   [raftcj.fsm :refer :all]))
 
 (defn now [] (System/currentTimeMillis))

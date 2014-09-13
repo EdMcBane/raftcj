@@ -1,6 +1,6 @@
 (ns raftcj.fsm-test
   (:require [clojure.test :refer :all]
-            [raftcj.core :refer :all]
+            [raftcj.base :refer :all]
             [raftcj.fsm :refer :all]))
 
 (def a-term 42)

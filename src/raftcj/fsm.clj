@@ -1,6 +1,6 @@
 (ns raftcj.fsm
   (:require clojure.string)
-  (:require  [raftcj.core :refer :all]))
+  (:require [raftcj.base :refer :all]))
   
   (defn msg [target type & args]
     (concat [target type] args))
