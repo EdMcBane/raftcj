@@ -32,3 +32,7 @@
 
 (defn msg [target type & args]
     (concat [target type] args))
+
+(defn bad-arg [& args]
+    #+clj (throw (new IllegalArgumentException (apply str args)))
+    #+cljs (throw (apply str args)))
