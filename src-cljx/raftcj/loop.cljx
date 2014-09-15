@@ -14,10 +14,7 @@
 (def alarm-time (atom nil))
 
 (defn clear-timer []
-  (swap! alarm-time (constantly nil)))
-
-(defn reset [delay] 
-  (swap! alarm-time (constantly (+ delay (now)))))
+    (swap! alarm-time (constantly nil)))
 
 (defn calc-timeout []
     (if (nil? @alarm-time) 
@@ -44,10 +41,10 @@
     ({  'execute        raftcj.fsm/execute
         'request-vote   raftcj.fsm/request-vote
         'voted          raftcj.fsm/voted
-        'append-entries raftcj.fsm/appended
+        'append-entries raftcj.fsm/append-entries
+        'appended       raftcj.fsm/appended
         'timeout        raftcj.fsm/timeout
-        'init           raftcj.fsm/init
-        'reset          raftcj.loop/reset}
+        'init           raftcj.fsm/init}
     sym))
 
 (defn invoke-handler [state evname args]
@@ -60,12 +57,7 @@
         (cond 
             (= :timer target)
             (do
-                (apply  (ns-resolve 'raftcj.loop evname) args)
-                [state []])
-
-            (vector? target)
-            (do
-                (do-send target (cons evname args))
+                (apply  (:reset sender) sender args)
                 [state []])
 
             (number? target)
@@ -77,7 +69,9 @@
                     [state []]))
             
             :else
-            (bad-arg "invalid target " target))))
+            (do
+                (do-send target (cons evname args))
+                [state []]))))
 
 (defn eventloop [config sender state events]
     (let [
