@@ -37,7 +37,7 @@
               { :source-paths ["test-cljx"]
                 :output-path "target/test-classes"
                 :rules :cljs}]}
-  :hooks [cljx.hooks leiningen.cljsbuild]
+  :hooks [cljx.hooks]
   :aliases {"demo" ["with-profile" "build"
                     "do" "clean,"
                     "cljx" "once,"
