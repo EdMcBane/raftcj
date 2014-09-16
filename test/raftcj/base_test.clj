@@ -34,11 +34,23 @@
 (deftest up-to-date-test
     (testing "yields true if both empty"
         (is (true? (up-to-date (initial-state 0 {}) 0 0))))
-    (testing "yields false if higher term"
-        (is (false? (up-to-date (initial-state 0 {}) 1 0))))
-    (testing "yields false if same term and higher index"
-        (is (false? (up-to-date (initial-state 0 {}) 0 1))))
+    (testing "yields true if higher term"
+        (let [
+            local-state (assoc (initial-state 0 {}) :log [{:term 0} {:term 1}])]
+            (is (true? (up-to-date local-state 2 1)))))
+    (testing "yields true if same term and higher index"
+        (let [
+            local-state (assoc (initial-state 0 {}) :log [{:term 0} {:term 1}])]
+            (is (true? (up-to-date local-state 1 2)))))
+    (testing "yields false if same term and lower index"
+        (let [
+            local-state (assoc (initial-state 0 {}) :log [{:term 0} {:term 1} {:term 1}])]
+            (is (false? (up-to-date local-state 1 1)))))
+    (testing "yields false if lower term"
+        (let [
+            local-state (assoc (initial-state 0 {}) :log [{:term 0} {:term 2}])]
+            (is (false? (up-to-date local-state 1 1)))))
     (testing "yields true if same term and same index"
-        (is (true? (up-to-date 
-            (update-in (initial-state 0 {}) [:log] (fn [old] (conj old {:term 0})))
-            0 1)))))
+        (let [
+            local-state (assoc (initial-state 0 {}) :log [{:term 0} {:term 1}])]
+            (is (true? (up-to-date local-state 1 1))))))

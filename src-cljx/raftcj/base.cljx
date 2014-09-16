@@ -25,8 +25,8 @@
   (let [[entry, index] (last-log state)
         term (:term entry)]
     (or
-     (> term last-log-term)
-     (and (= term last-log-term) (>= index last-log-index) ))))
+     (> last-log-term term)
+     (and (= term last-log-term) (>= last-log-index index)))))
 
 (defn state-of [state & _] (:statename state)) ;TODO: variable arity
 
