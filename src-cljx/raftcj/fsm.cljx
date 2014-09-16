@@ -168,7 +168,7 @@
         entries (:commit-index state))))
 
   (defmulti appended state-of)
-  (defev appended :default [appender next-index success]
+  (defev appended :leader [appender next-index success]
     []
     (if success
       (let [
@@ -185,7 +185,11 @@
           msgs (map #(msg % 'executed true) outstanding-reqs)]
           [state msgs])
       [(assoc-in state [:next-index appender] (dec next-index))
-        (update-msg state appender (dec next-index))]))
+        [(update-msg state appender (dec next-index))]]))
+
+  (defev appended :default [appender next-index success]
+    []
+    [state []])
 
   (defmulti append-entries state-of)
   (defev append-entries :follower [leader-id prev-log-index prev-log-term entries leader-commit]
