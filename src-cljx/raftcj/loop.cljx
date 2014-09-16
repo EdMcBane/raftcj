@@ -26,8 +26,11 @@
         state
         (let [
             [target evname & args :as event] (first events)
+            ;_ (println "dispatching event" target evname args)
             [state newevents] 
             (if (= (:id state) target)
-                (invoke-handler state evname args)
+                (do
+                    (println "<--" target (cons evname args))
+                    (invoke-handler state evname args))
                 (dispatch-fn state event))]
             (recur dispatch-fn state (concat newevents (rest events))))))
