@@ -228,10 +228,10 @@
       state (update-in state [:log] #(conj % {:term (:current-term state) :cmd cmd}))
       [_ last-log-index] (last-log state)
       state (assoc-in state [:client-reqs last-log-index] client)
-      _ (println (:next-index state))
       needing-update (filter (fn [[peer idx]] (>= last-log-index idx)) (:next-index state))
-      _ (println "upd" needing-update)
       updates (map #(apply (partial update-msg state) %) needing-update)] ; TODO: test
       [state updates]))
+
+  ; TODO: extract logic for state persistance so that it is pluggable
 
 ; TODO: create part-of-cluster check logic outside ?
