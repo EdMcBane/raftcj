@@ -37,7 +37,6 @@
     (send-fn (serialize-fn data)))
 
 (defn dispatch [net-send-event state [target evname & args]]
-    (println "dispatching event" target evname args)
     (cond 
         (= :timer target)
         (do
@@ -46,6 +45,7 @@
 
         (number? target)
         (do 
+            (println "-->" target (cons evname args))
             (net-send-event target (cons evname args))
             [state []])
     
@@ -83,4 +83,3 @@
                 34 ["127.0.0.1" 10034]
                 45 ["127.0.0.1" 10045]}}]
         (udp config id)))
-
