@@ -3,7 +3,8 @@
         cljs.reader
 		[raftcj.loop :refer [eventloop]]
 		[raftcj.base :refer [initial-state msg bad-arg]]
-        
+        [raftcj.peerjskey :refer [peerjs-key]]
+
         [dommy.utils :as utils]
         [dommy.core :as dommy])
     (:use-macros
@@ -111,7 +112,7 @@
             ;   34 34
             ;   45 45
             }}]
-        (webrtc config id "plh3877i44fmkj4i")))
+        (webrtc config id peerjs-key)))
 
 
 (defn display-state []
