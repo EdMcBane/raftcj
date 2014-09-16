@@ -180,9 +180,10 @@
             [updated (new-commit-index (get-in state [:config :members]) (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
           updated old-commit-index)
           state (assoc state :commit-index commit-index)
-          newly-committed (range commit-index old-commit-index -1)
+          newly-committed (reverse (range commit-index old-commit-index -1))
           outstanding-reqs (filter (complement nil?) (map (partial get (:client-reqs state)) newly-committed))
-          msgs (map #(msg % 'executed true) outstanding-reqs)]
+          msgs (map #(msg % 'executed true) outstanding-reqs)
+          state (reduce apply-to-fsm state (map #(:cmd (get (:log state) %)) newly-committed))] ;TODO test
           [state msgs])
       [(assoc-in state [:next-index appender] (dec next-index))
         [(update-msg state appender (dec next-index))]]))
