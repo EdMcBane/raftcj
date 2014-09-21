@@ -32,20 +32,17 @@
     (> (count votes) (/ (count cluster) 2)))
 
   (defn vote [state candidate]
-    (let [
-      vote (:voted-for state)]
-      (assert (or (nil? vote) (= candidate vote)))
-      (assoc state :voted-for candidate)))
+      (assert (has-vote state candidate))
+      (assoc state :voted-for candidate))
 
   (defn become-leader [state] ; TODO: change interface to return [state, []]
     (let [
       [_ last-log-index] (last-log state)
-      to-entry #(vector % (inc last-log-index))
       members (keys (get-in state [:config :members]))
       others (filter #(not (= (:id state) %)) members)]
       (-> state 
-        (assoc :next-index (into {} (map to-entry others)))
-        (assoc :next-match (into {} (map #(vector % 0) others)))
+        (assoc :next-index (into {} (map vector others (repeat (inc last-log-index)))))
+        (assoc :next-match (into {} (map vector others (repeat 0))))
         (assoc :statename :leader))))
 
   (defn init [state]
@@ -104,7 +101,7 @@
     [state (advertise-leader state)])
 
   (defn update-or-append 
-    ([orig newer] 
+    ([orig newer]
       (update-or-append orig newer []))
     ([[x & xs :as orig][y & ys] acc]
       (cond 
@@ -125,21 +122,18 @@
   (def fsm-fn conj)
 
   (defn apply-to-fsm [state, cmd] 
-    (let [
-      state (update-in state [:fsm] #(fsm-fn % cmd))
-      state (update-in state [:last-applied] inc)]
-      state))
+    (-> state
+      (update-in [:fsm] #(fsm-fn % cmd))
+      (update-in [:last-applied] inc)))
 
   (defn append-log [state prev-log-index entries leader-commit] 
     (let [
       state (update-in state [:log] #(update-log % prev-log-index entries))
-      commit-index (:commit-index state)
       [_, last-log-index] (last-log state)
-      new-commit-index (max commit-index (min leader-commit last-log-index))
+      new-commit-index (max (:commit-index state) (min leader-commit last-log-index))
       state (assoc state :commit-index new-commit-index)
       newly-committed (map :cmd (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index)))]
       (reduce apply-to-fsm state newly-committed)))
-
 
   (defn highest-majority [members indexes fallback]
     (let [
