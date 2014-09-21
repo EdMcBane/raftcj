@@ -17,9 +17,7 @@
 
 (defn last-log [state]
   (assert (> (count (:log state)) 0))
-  (let [index (dec (count (:log state)))
-        entry (get (:log state) index)]
-    [entry, index]))
+  [(last (:log state)) (dec (count (:log state)))])
 
 (defn up-to-date [state last-log-term last-log-index]
   (let [[entry, index] (last-log state)
@@ -28,7 +26,7 @@
      (> last-log-term term)
      (and (= term last-log-term) (>= last-log-index index)))))
 
-(defn state-of [state & _] (:statename state)) ;TODO: variable arity
+(defn state-of [state & _] (:statename state))
 
 (defn msg [target type & args]
     (concat [target type] args))
