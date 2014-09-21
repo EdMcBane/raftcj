@@ -2,7 +2,7 @@
     <head>
         <script src="out/goog/base.js" type="text/javascript"></script>
         <script src="raftcj.js" type="text/javascript"></script>
-        <script type="text/javascript">goog.require("raftcj.core");</script>
+        <script type="text/javascript">goog.require("raftcj.ui");</script>
         <script src="http://cdn.peerjs.com/0.3/peer.js"></script>
         <style>
         label {
@@ -22,7 +22,7 @@
         <div><label>commit</label><span id="commit">N/A</span></div>
         <div><label>log</label><span id="log">N/A</span></div>
         <script type="text/javascript">
-            window.onload = function() { raftcj.core.setup_ui();}
+            window.onload = function() { raftcj.ui.setup_ui();}
         </script>
     </body>
 </html>
