@@ -37,11 +37,14 @@
       (assert (or (nil? vote) (= candidate vote)))
       (assoc state :voted-for candidate)))
 
+  (defn member-sets [state]
+    (map keys (get-in state [:config :members])))
+
   (defn become-leader [state] ; TODO: change interface to return [state, []]
     (let [
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
-      members (keys (get-in state [:config :members]))
+      members (flatten (member-sets state))
       others (filter #(not (= (:id state) %)) members)]
       (-> state 
         (assoc :next-index (into {} (map to-entry others)))
@@ -94,7 +97,7 @@
       state (update-in state [:current-term] inc)
       reset-msg (msg :timer 'reset (election-delay state))
       [last-log-entry last-log-index] (last-log state)
-      members (keys (get-in state [:config :members]))
+      members (flatten (member-sets state))
       vote-reqs (map
          #(msg % 'request-vote (:current-term state) (:id state) last-log-index (:term last-log-entry))
          members)]
@@ -122,9 +125,18 @@
       suffix (update-or-append updating entries)]
       (vec (concat prefix suffix))))
 
+  (defn update-state-on-log [state prev-log-index entries]
+    (-> state 
+      (update-in [:log] #(update-log % prev-log-index entries))
+      (assoc :members 
+        (if-let [
+          new-members (last (filter :members entries))] ; TODO: what if we have 3 configs running over the cluster?
+          (cons new-members (:members state)) 
+          (:members state))))) ; TODO: members config should be lazily loaded from log so that it works when starting up after crash
+
   (def fsm-fn conj)
 
-  (defn apply-to-fsm [state, cmd] 
+  (defn apply-to-fsm [state cmd]
     (let [
       state (update-in state [:fsm] #(fsm-fn % cmd))
       state (update-in state [:last-applied] inc)]
@@ -132,7 +144,7 @@
 
   (defn append-log [state prev-log-index entries leader-commit] 
     (let [
-      state (update-in state [:log] #(update-log % prev-log-index entries))
+      state (update-state-on-log state prev-log-index entries)
       commit-index (:commit-index state)
       [_, last-log-index] (last-log state)
       new-commit-index (max commit-index (min leader-commit last-log-index))
@@ -148,10 +160,10 @@
       (reduce max fallback (filter (comp is-majority count-ge) (set indexes)))))
 
   ; TODO simplify by handling match-index for self like everybody else ?
-  (defn new-commit-index [members current-term log indexes commit-index]
+  (defn new-commit-index [member-sets current-term log indexes commit-index]
     (let [
       local-match-index (dec (count log))
-      highest-uncommited-majority (highest-majority members (conj indexes local-match-index) commit-index)
+      highest-uncommited-majority (highest-majority member-sets (conj indexes local-match-index) commit-index)
       uncommitted-replicated-indexes (range highest-uncommited-majority commit-index -1)
       is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
       (first (filter is-from-current-term uncommitted-replicated-indexes))))
@@ -177,7 +189,7 @@
             (assoc-in [:next-match appender] (dec next-index)))
           old-commit-index (:commit-index state)
           commit-index (if-let 
-            [updated (new-commit-index (get-in state [:config :members]) (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
+            [updated (new-commit-index (member-sets state) (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
           updated old-commit-index)
           state (assoc state :commit-index commit-index)
           newly-committed (reverse (range commit-index old-commit-index -1))
@@ -222,16 +234,28 @@
   (defn elected [state]
     [state (advertise-leader state)])
 
-  (defmulti execute state-of)
-  (defmethod execute :leader [state client cmd]
+  (defn append-and-replicate [state entry] 
     (let [
-      state (update-in state [:log] #(conj % {:term (:current-term state) :cmd cmd}))
       [_ last-log-index] (last-log state)
-      state (assoc-in state [:client-reqs last-log-index] client)
-      needing-update (filter (fn [[peer idx]] (>= last-log-index idx)) (:next-index state))
+      entry (merge entry {:term (:current-term state)})
+      state (update-in state [:log] #(update-log % last-log-index [entry]))
+      needing-update (filter (fn [[peer idx]] (>= (inc last-log-index) idx)) (:next-index state))
       updates (map #(apply (partial update-msg state) %) needing-update)] ; TODO: test
       [state updates]))
 
-  ; TODO: extract logic for state persistance so that it is pluggable
+  (defmulti execute state-of)
+  (defmethod execute :leader [state client cmd]
+    (let [
+      [_ last-log-index] (last-log state)
+      next-index (inc last-log-index)
+      state (assoc-in state [:client-reqs next-index] client)]
+      (append-and-replicate state {:cmd cmd})))
 
+
+  (defmulti change-config state-of)
+  (defmethod change-config :leader [state members]
+    (append-and-replicate state {:members members}))
+
+; TODO: logic is duplicated between leader and followers for log and fsm updates
+; TODO: extract logic for state persistance so that it is pluggable
 ; TODO: create part-of-cluster check logic outside ?
