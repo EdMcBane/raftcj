@@ -258,26 +258,65 @@
             (is (= 3 (:commit-index after))))))
 
 (deftest highest-majority-test 
-    (testing "yields default value when no majority is present"
-        (is (= 0 (highest-majority (:members config) [1 2] 0))))
-    (testing "yields default on empty vector"
-        (is (= 0 (highest-majority (:members config) [] 0))))
-    (testing "yields majority if present"
-        (is (= 1 (highest-majority (:members config) [1 1 2] 0))))
+    (testing "yields default value when higher majority is present"
+        (is (= 0 (highest-majority [[1 2 3]] {1 10, 2 0, 3 0} 0))))
+    (testing "yields higher majority if present"
+        (is (= 1 (highest-majority [[1 2 3]] {1 1, 2 1, 3 2} 0))))
     (testing "yields highest majority if present"
-        (is (= 2 (highest-majority (:members config) [1 1 2 2 2] 0)))))
+        (is (= 2 (highest-majority [[1 2 3]] {1 1, 2 2, 3 2} 0))))
+    (testing "requires majority in all member configs"
+        (is (= 1 (highest-majority [[1 2 3] [2 3 4]] {1 2, 2 2, 3 1, 4 1} 0)))))
+
 
 (deftest new-commit-index-test 
     (testing "yields nil on no majority"
-        (is (nil? (new-commit-index (:members config) 0 [{:term 0}] [] 0))))
+        (is (nil? (new-commit-index {
+            :id 0
+            :config {:members [{0 0, 1 1, 2 2,}]} 
+            :current-term 0 
+            :log [{:term 0}] 
+            :next-match {1 0, 2 0, 3 0} 
+            :commit-index 0 }))))
     (testing "yields replicated uncommited index"
-        (is (= 1 (new-commit-index (:members config) 0 [{:term 0} {:term 0} {:term 0}] [1 1 1] 0))))
+        (is (= 1 (new-commit-index {
+            :id 0
+            :config {:members [{0 0, 1 1, 2 2}]} 
+            :current-term 0 
+            :log [{:term 0} {:term 0} {:term 0}]
+            :next-match {1 1, 2 1} 
+            :commit-index 0 }))))
     (testing "yields highest replicated uncommited index"
-        (is (= 2 (new-commit-index (:members config) 0 [{:term 0} {:term 0} {:term 0}] [2 2 2] 0))))
+        (is (= 2 (new-commit-index {
+            :id 0
+            :config {:members [{0 0, 1 1, 2 2}]} 
+            :current-term 0 
+            :log [{:term 0} {:term 0} {:term 0}]
+            :next-match {1 2, 2 2} 
+            :commit-index 0 }))))
+    (testing "does not yield highest replicated uncommited index from previous terms"
+        (is (nil? (new-commit-index {
+            :id 0
+            :config {:members [{0 0, 1 1, 2 2}]} 
+            :current-term 2
+            :log [{:term 0} {:term 1} {:term 1}]
+            :next-match {1 2, 2 2} 
+            :commit-index 0 }))))
     (testing "yields highest replicated uncommited index from current term"
-        (is (= 1 (new-commit-index (:members config) 1 [{:term 0} {:term 1} {:term 2}] [2 2 2] 0))))
+        (is (= 2 (new-commit-index {
+            :id 0
+            :config {:members [{0 0, 1 1, 2 2}]} 
+            :current-term 2
+            :log [{:term 0} {:term 1} {:term 2}]
+            :next-match {1 2, 2 2} 
+            :commit-index 0 }))))
     (testing "self participates in voting with highest log index"
-        (is (= 1 (new-commit-index (:members config) 0 [{:term 0} {:term 0}] [2 2 1] 0)))))
+        (is (= 1 (new-commit-index {
+            :id 0
+            :config {:members [{0 0, 1 1, 2 2}]} 
+            :current-term 1 
+            :log [{:term 0} {:term 1}]
+            :next-match {1 2, 2 1} 
+            :commit-index 0 })))))
 
 (deftest appended-test
     (testing "leader becomes follower if higher term"

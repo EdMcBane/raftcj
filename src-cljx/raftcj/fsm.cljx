@@ -44,7 +44,7 @@
     (let [
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
-      members (flatten (member-sets state))
+      members (set (flatten (member-sets state)))
       others (filter #(not (= (:id state) %)) members)]
       (-> state 
         (assoc :next-index (into {} (map to-entry others)))
@@ -62,7 +62,7 @@
       [state []]
       (let [
         state (update-in state [:votes] #(conj % voter))
-        members (get-in state [:config :members])]
+        members (set (flatten (member-sets state)))]
         (if (majority members (:votes state))
           (elected (become-leader state))
           [state []]))))
@@ -97,7 +97,7 @@
       state (update-in state [:current-term] inc)
       reset-msg (msg :timer 'reset (election-delay state))
       [last-log-entry last-log-index] (last-log state)
-      members (flatten (member-sets state))
+      members (set (flatten (member-sets state)))
       vote-reqs (map
          #(msg % 'request-vote (:current-term state) (:id state) last-log-index (:term last-log-entry))
          members)]
@@ -153,18 +153,31 @@
       (reduce apply-to-fsm state newly-committed)))
 
 
-  (defn highest-majority [members indexes fallback]
+  (defn submap [src ks]
+    (into {} (map (fn [k] [k (src k)]) ks)))
+
+  (defn replicated-on-majority [indexes i]
     (let [
-      count-ge #(count (filter (partial <= %) indexes))
-      is-majority #(> % (/ (count members) 2))]
-      (reduce max fallback (filter (comp is-majority count-ge) (set indexes)))))
+      nodes-ge (count (filter (partial <= i) (vals indexes)))]
+      (> nodes-ge (/ (count (keys indexes)) 2))))
+
+  (defn highest-majority [member-sets indexes fallback]
+    (let [
+      indexes-per-set (map #(submap indexes %) member-sets)
+      is-majority-in-all-configs (apply every-pred (map #(partial replicated-on-majority %) indexes-per-set))]
+      (reduce max fallback (filter is-majority-in-all-configs (set (vals indexes))))))
 
   ; TODO simplify by handling match-index for self like everybody else ?
-  (defn new-commit-index [member-sets current-term log indexes commit-index]
+  (defn new-commit-index [state] 
     (let [
+      member-sets (member-sets state)
+      current-term (:current-term state) 
+      log (:log state) 
+      old-commit-index (:commit-index state)
       local-match-index (dec (count log))
-      highest-uncommited-majority (highest-majority member-sets (conj indexes local-match-index) commit-index)
-      uncommitted-replicated-indexes (range highest-uncommited-majority commit-index -1)
+      match-indexes (assoc (:next-match state) (:id state) local-match-index)
+      highest-uncommited-majority (highest-majority member-sets match-indexes old-commit-index)
+      uncommitted-replicated-indexes (range highest-uncommited-majority old-commit-index -1)
       is-from-current-term (fn [idx] (= current-term (:term (log idx))))]
       (first (filter is-from-current-term uncommitted-replicated-indexes))))
 
@@ -189,7 +202,7 @@
             (assoc-in [:next-match appender] (dec next-index)))
           old-commit-index (:commit-index state)
           commit-index (if-let 
-            [updated (new-commit-index (member-sets state) (:current-term state) (:log state) (vals (:next-match state)) old-commit-index)]
+            [updated (new-commit-index state)]
           updated old-commit-index)
           state (assoc state :commit-index commit-index)
           newly-committed (reverse (range commit-index old-commit-index -1))
