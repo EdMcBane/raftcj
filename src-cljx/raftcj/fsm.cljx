@@ -38,13 +38,16 @@
       (assoc state :voted-for candidate)))
 
   (defn member-sets [state]
-    (map keys (get-in state [:config :members])))
+    (map (comp set keys) (get-in state [:config :members])))
+
+  (defn merge-set [& args]
+    (set (flatten (map vec args))))
 
   (defn become-leader [state] ; TODO: change interface to return [state, []]
     (let [
       [_ last-log-index] (last-log state)
       to-entry #(vector % (inc last-log-index))
-      members (set (flatten (member-sets state)))
+      members (apply merge-set (member-sets state))
       others (filter #(not (= (:id state) %)) members)]
       (-> state 
         (assoc :next-index (into {} (map to-entry others)))
@@ -62,8 +65,8 @@
       [state []]
       (let [
         state (update-in state [:votes] #(conj % voter))
-        members (set (flatten (member-sets state)))]
-        (if (majority members (:votes state))
+        member-sets (member-sets state)]
+        (if (every? true? (map #(majority % (:votes state)) member-sets))
           (elected (become-leader state))
           [state []]))))
   
@@ -97,7 +100,7 @@
       state (update-in state [:current-term] inc)
       reset-msg (msg :timer 'reset (election-delay state))
       [last-log-entry last-log-index] (last-log state)
-      members (set (flatten (member-sets state)))
+      members (merge-set (member-sets state))
       vote-reqs (map
          #(msg % 'request-vote (:current-term state) (:id state) last-log-index (:term last-log-entry))
          members)]
@@ -161,6 +164,8 @@
       nodes-ge (count (filter (partial <= i) (vals indexes)))]
       (> nodes-ge (/ (count (keys indexes)) 2))))
 
+  ; TODO: refactor so that we have a majority? fn which takes a list of ids and a member-sets
+  ; TODO: refactor so that we have a single "others" function which takes state or config
   (defn highest-majority [member-sets indexes fallback]
     (let [
       indexes-per-set (map #(submap indexes %) member-sets)
