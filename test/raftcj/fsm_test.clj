@@ -374,22 +374,22 @@
             before (initial-state 0 config)
             [after, msgs] (append-entries before 1 a-candidate-id 1 1 [] 0)]
             (is (some (fn [[target type args]] (= 'reset type)) msgs))))
-     (testing "replies with success if referencing existing prev-log-entry"
+    (testing "replies with success if referencing existing prev-log-entry"
         (let [
             before (initial-state 0 config)
             [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)]
             (is (some #(= true (last %)) msgs))))
-     (testing "resets timer on successful append-entries"
+    (testing "resets timer on successful append-entries"
         (let [
             before (initial-state 0 config)
             [after, msgs] (append-entries before 1 a-candidate-id 0 0 [] 0)]
             (is (some (fn [[target type args]] (= 'reset type)) msgs))))
-     (testing "applies committed commands to fsm"
+    (testing "applies committed commands to fsm"
         (let [
             before (initial-state 0 config)
             [after, msgs] (append-entries before 0 a-candidate-id 0 0 [{:term 0 :cmd "mario"}, {:term 0 :cmd "luigi"}] 1)]
             (is (= ["mario"] (:fsm after)))))
-     (testing "applies committed commands to fsm"
+    (testing "applies committed commands to fsm"
         (let [
             before (initial-state 0 config)
             [after, msgs] (append-entries before 0 a-candidate-id 0 0 [{:term 0 :cmd "mario"}] 1)]
