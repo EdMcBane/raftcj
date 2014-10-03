@@ -131,11 +131,11 @@
   (defn update-state-on-log [state prev-log-index entries]
     (-> state 
       (update-in [:log] #(update-log % prev-log-index entries))
-      (assoc :members 
+      (assoc-in  [:config :members] 
         (if-let [
           new-members (last (filter :members entries))] ; TODO: what if we have 3 configs running over the cluster?
           (cons new-members (:members state)) 
-          (:members state))))) ; TODO: members config should be lazily loaded from log so that it works when starting up after crash
+          (get-in state [:config :members]))))) ; TODO: members config should be lazily loaded from log so that it works when starting up after crash
 
   (def fsm-fn conj)
 
@@ -152,8 +152,12 @@
       [_, last-log-index] (last-log state)
       new-commit-index (max commit-index (min leader-commit last-log-index))
       state (assoc state :commit-index new-commit-index)
-      newly-committed (map :cmd (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index)))]
-      (reduce apply-to-fsm state newly-committed)))
+      newly-committed (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index))
+      commands-committed (map :cmd newly-committed)
+      state (if (first (filter :members newly-committed)) 
+        (update-in state [:config :members] (comp vector first))
+        state)]
+      (reduce apply-to-fsm state commands-committed)))
 
 
   (defn submap [src ks]
