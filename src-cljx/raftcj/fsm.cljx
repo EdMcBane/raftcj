@@ -1,7 +1,7 @@
 (ns raftcj.fsm
   (:require 
     clojure.string 
-    [raftcj.base :refer [msg has-vote last-log up-to-date state-of]]
+    [raftcj.base :refer [msg has-vote last-log up-to-date state-of bad-arg]]
     #+clj [raftcj.macros :refer [defev]])
     #+cljs (:require-macros [raftcj.macros :refer [defev]]))
   
@@ -133,17 +133,21 @@
       (update-in [:log] #(update-log % prev-log-index entries))
       (assoc-in  [:config :members] 
         (if-let [
-          new-members (last (filter :members entries))] ; TODO: what if we have 3 configs running over the cluster?
-          (cons new-members (:members state)) 
+          new-members (last (filter (comp not nil?) (map :members entries)))] ; TODO: what if we have 3 configs running over the cluster?
+          (cons new-members (get-in state [:config :members])) 
           (get-in state [:config :members]))))) ; TODO: members config should be lazily loaded from log so that it works when starting up after crash
 
   (def fsm-fn conj)
 
-  (defn apply-to-fsm [state cmd]
-    (let [
-      state (update-in state [:fsm] #(fsm-fn % cmd))
-      state (update-in state [:last-applied] inc)]
-      state))
+  (defn commit [state entry]
+    (cond 
+      (:cmd entry)
+      (-> state
+        (update-in [:fsm] #(fsm-fn % (:cmd entry)))
+        (update-in [:last-applied] inc))
+      (:members entry)
+      (update-in state [:config :members] (comp vector first))
+      :else (bad-arg "invalid entry")))
 
   (defn append-log [state prev-log-index entries leader-commit] 
     (let [
@@ -152,13 +156,8 @@
       [_, last-log-index] (last-log state)
       new-commit-index (max commit-index (min leader-commit last-log-index))
       state (assoc state :commit-index new-commit-index)
-      newly-committed (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index))
-      commands-committed (map :cmd newly-committed)
-      state (if (first (filter :members newly-committed)) 
-        (update-in state [:config :members] (comp vector first))
-        state)]
-      (reduce apply-to-fsm state commands-committed)))
-
+      newly-committed (subvec (:log state) (inc (:last-applied state)) (inc new-commit-index))]
+      (reduce commit state newly-committed)))
 
   (defn submap [src ks]
     (into {} (map (fn [k] [k (src k)]) ks)))
@@ -214,10 +213,10 @@
             [updated (new-commit-index state)]
           updated old-commit-index)
           state (assoc state :commit-index commit-index)
-          newly-committed (reverse (range commit-index old-commit-index -1))
-          outstanding-reqs (filter (complement nil?) (map (partial get (:client-reqs state)) newly-committed))
+          newly-committed-indexes (reverse (range commit-index old-commit-index -1))
+          outstanding-reqs (filter (complement nil?) (map (partial get (:client-reqs state)) newly-committed-indexes))
           msgs (map #(msg % 'executed true) outstanding-reqs)
-          state (reduce apply-to-fsm state (map #(:cmd (get (:log state) %)) newly-committed))] ;TODO test
+          state (reduce commit state (map #(get (:log state) %) newly-committed-indexes))] ;TODO test
           [state msgs])
       [(assoc-in state [:next-index appender] (dec next-index))
         [(update-msg state appender (dec next-index))]]))
@@ -256,11 +255,12 @@
   (defn elected [state]
     [state (advertise-leader state)])
 
+  ; TODO: on-commit logic is partially duplicated between leader and followers
   (defn append-and-replicate [state entry] 
     (let [
       [_ last-log-index] (last-log state)
       entry (merge entry {:term (:current-term state)})
-      state (update-in state [:log] #(update-log % last-log-index [entry]))
+      state (update-state-on-log state last-log-index [entry])
       needing-update (filter (fn [[peer idx]] (>= (inc last-log-index) idx)) (:next-index state))
       updates (map #(apply (partial update-msg state) %) needing-update)] ; TODO: test
       [state updates]))

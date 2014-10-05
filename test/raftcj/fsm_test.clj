@@ -202,57 +202,60 @@
     (testing "truncates on mismatch"
         (is (= [1 4] (update-or-append [1 2 3] [1 4] [])))))
 
+(defn cmd-entry [term]
+    {:term term :cmd "X"})
+
 (deftest append-log-test 
     (testing "appends to the end if non-overlapping"
         (let [
             before (initial-state 0 config)
-            entries [{:term 1} {:term 2}]
+            entries [(cmd-entry 1) (cmd-entry 2)]
             after (append-log before 0 entries 0)]
             (is (= 
-                [{:term 0} {:term 1} {:term 2}] 
+                [{:term 0} (cmd-entry 1) (cmd-entry 2)] 
                 (:log after)))))
     (testing "overwrites if mismatched"
         (let [
             before (initial-state 0 config)
-            entries [{:term 1} {:term 2}]
+            entries [(cmd-entry 1) (cmd-entry 2)]
             during (append-log before 0 entries 0)
-            after (append-log during 1 [{:term 3}] 0)]
+            after (append-log during 1 [(cmd-entry 3)] 0)]
             (is (= 
-                [{:term 0} {:term 1} {:term 3}] 
+                [{:term 0} (cmd-entry 1) (cmd-entry 3)] 
                 (:log after)))))
     (testing "overwrites and truncates if mismatched"
         (let [
             before (initial-state 0 config)
-            entries [{:term 1} {:term 2} {:term 3}]
+            entries [(cmd-entry 1) (cmd-entry 2) (cmd-entry 3)]
             during (append-log before 0 entries 0)
-            after (append-log during 0 [{:term 4}] 0)]
+            after (append-log during 0 [(cmd-entry 4)] 0)]
             (is (= 
-                [{:term 0} {:term 4}] 
+                [{:term 0} (cmd-entry 4)]
                 (:log after)))))
     (testing "does not overwrite with empty entries"
         (let [
             before (initial-state 0 config)
-            entries [{:term 1} {:term 2}]
+            entries [(cmd-entry 1) (cmd-entry 2)]
             during (append-log before 0 entries 0)
             after (append-log during 0 [] 0)]
             (is (= 
-                [{:term 0} {:term 1} {:term 2}] 
+                [{:term 0} (cmd-entry 1) (cmd-entry 2)]
                 (:log after)))))
     (testing "updates commit-index to leader-commit < last-entry-index"
         (let [
             before (initial-state 0 config)
-            entries [{:term 1} {:term 2}]
+            entries [(cmd-entry 1) (cmd-entry 2)]
             after (append-log before 0 entries 1)]
             (is (= 1 (:commit-index after)))))
     (testing "updates commit-index to leader-commit == last-entry-index"
         (let [
             before (initial-state 0 config)
-            entries [{:term 1} {:term 2}]
+            entries [(cmd-entry 1) (cmd-entry 2)]
             after (append-log before 0 entries 2)]
             (is (= 2 (:commit-index after)))))
     (testing "does not update commit-index to leader-commit < commit-index"
         (let [
-            before (assoc (assoc (initial-state 0 config) :commit-index 3) :log [{:term 0} {:term 0} {:term 0} {:term 0}])
+            before (assoc (assoc (initial-state 0 config) :commit-index 3) :log [{:term 0} (cmd-entry 0) (cmd-entry 0) (cmd-entry 0)])
             entries []
             after (append-log before 0 entries 2)]
             (is (= 3 (:commit-index after))))))
@@ -342,13 +345,13 @@
                 (is (= 0 (get-in after [:next-match a-candidate-id]))))))
     (testing "updates commit-index on successful replication on majority"
         (let [
-            state (assoc (become-leader (initial-state 0 config)) :log [{:term 0} {:term 0} {:term 0}])
+            state (assoc (become-leader (initial-state 0 config)) :log [{:term 0} (cmd-entry 0) (cmd-entry 0)])
             [state, msgs] (appended state 0 a-candidate-id 3 true)
             [state, msgs] (appended state 0 another-candidate-id 3 true)]
             (is (= 2 (:commit-index state)))))
     (testing "notifies success to clients on commit-index update"
         (let [
-            state (assoc-in (assoc (become-leader (initial-state 0 config)) :log [{:term 0} {:term 0} {:term 0}]) [:client-reqs 1] :a-client)
+            state (assoc-in (assoc (become-leader (initial-state 0 config)) :log [{:term 0} (cmd-entry 0) (cmd-entry 0)]) [:client-reqs 1] :a-client)
             [state, msgs] (appended state 0 a-candidate-id 2 true)
             [state, msgs] (appended state 0 another-candidate-id 2 true)]
             (is (some #(= :a-client (first %)) msgs)))))
@@ -393,7 +396,14 @@
         (let [
             before (initial-state 0 config)
             [after, msgs] (append-entries before 0 a-candidate-id 0 0 [{:term 0 :cmd "mario"}] 1)]
-            (is (= 1 (:last-applied after))))))
+            (is (= 1 (:last-applied after)))))
+
+    (testing "follower adds new-cluster to config"
+        (let [
+            new-cluster {1 :a 2 :b}
+            before (initial-state 0 config)
+            [after, msgs] (append-entries before 0 a-candidate-id 0 0 [{:term 0 :members new-cluster}] 0)]
+            (is (= 2 (count (get-in after [:config :members])))))))
 
 ; TODO: what does it mean to "retry" in case of timeout?
 
